@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "AirPlay.App (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "AirPlay.App (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

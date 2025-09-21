@@ -1,0 +1,3 @@
+[submodule "airplayreceiver"]
+	path = AirPlay.Core
+	url = https://github.com/natsurainko/airplayreceiver

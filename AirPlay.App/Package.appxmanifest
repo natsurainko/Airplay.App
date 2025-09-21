@@ -8,12 +8,10 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="2b061583-516f-40b8-a1f3-8315da40e2b5"
+    Name="AirPlay.App"
     Publisher="CN=Natsurainko"
     Version="1.0.0.0" />
-
-  <mp:PhoneIdentity PhoneProductId="2b061583-516f-40b8-a1f3-8315da40e2b5" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
-
+	
   <Properties>
     <DisplayName>AirPlay App</DisplayName>
     <PublisherDisplayName>Natsurainko</PublisherDisplayName>
@@ -47,8 +45,5 @@
 
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
-    <Capability Name="internetClient"/>
-    <Capability Name="internetClientServer"/>
-    <Capability Name="privateNetworkClientServer"/>
   </Capabilities>
 </Package>

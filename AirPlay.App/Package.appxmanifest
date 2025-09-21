@@ -15,7 +15,7 @@
   <mp:PhoneIdentity PhoneProductId="2b061583-516f-40b8-a1f3-8315da40e2b5" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>AirPlay.App</DisplayName>
+    <DisplayName>AirPlay App</DisplayName>
     <PublisherDisplayName>Natsurainko</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -34,8 +34,8 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="AirPlay.App"
-        Description="AirPlay.App"
+        DisplayName="AirPlay App"
+        Description="AirPlay App"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">

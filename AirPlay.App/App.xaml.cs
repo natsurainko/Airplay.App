@@ -94,7 +94,7 @@ public partial class App : Application
         TaskbarIcon = new()
         {
             ContextMenuMode = ContextMenuMode.SecondWindow,
-            ToolTipText = "AirPlay.App",
+            ToolTipText = "AirPlay App",
             NoLeftClickDelay = true,
             IconSource = GetIconTheme(ShouldSystemUseDarkMode()),
             LeftClickCommand = leftButtonCommand,

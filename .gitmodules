@@ -1,3 +1,6 @@
 [submodule "AirPlay.Core"]
 	path = AirPlay.Core
 	url = https://github.com/natsurainko/AirPlay.Core
+[submodule "Airplay.Core2"]
+	path = Airplay.Core2
+	url = https://github.com/natsurainko/Airplay.Core2

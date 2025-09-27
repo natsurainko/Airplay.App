@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>AirPlay.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -10,6 +10,7 @@
     <UseWinUI>true</UseWinUI>
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
+	<LangVersion>preview</LangVersion>
   </PropertyGroup>
   <ItemGroup>
     <Content Remove="Assets\airplay_x16.ico" />
@@ -19,6 +20,9 @@
     <None Remove="Assets\airplay.ico" />
     <None Remove="Assets\airplay.png" />
     <None Remove="Assets\Icons\airplay_x16_light.ico" />
+    <None Remove="Windows\ControlPage.xaml" />
+    <None Remove="Windows\ControlWindow.xaml" />
+    <None Remove="Windows\MirrorWindow.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -43,14 +47,37 @@
     <ProjectCapability Include="Msix" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="H.NotifyIcon.WinUI" Version="2.3.0" />
+    <PackageReference Include="LibVLCSharp" Version="3.9.4" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.9" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4948" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.250907003" />
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.21" />
+    <PackageReference Include="WinUIEx" Version="2.8.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\AirPlay.Core\AirPlay.Core\AirPlay.Core.csproj" />
+    <ProjectReference Include="..\Airplay.Core2\AirPlay.Core2\AirPlay.Core2.csproj" />
+    <ProjectReference Include="..\ProducerConsumerStream\Nito.ProducerConsumerStream.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Windows\MirrorWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Windows\ControlPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Windows\ControlWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
 
   <!--

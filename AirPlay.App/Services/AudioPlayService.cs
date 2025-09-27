@@ -1,8 +1,9 @@
-﻿using AirPlay.Models;
+﻿using AirPlay.Core2.Models;
+using AirPlay.Core2.Services;
 using Microsoft.Extensions.Hosting;
 using NAudio.Wave;
-using System;
-using System.Linq;
+using NAudio.Wave.SampleProviders;
+using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -10,39 +11,56 @@ namespace AirPlay.App.Services;
 
 class AudioPlayService : IHostedService
 {
-    private readonly IAirPlayReceiver _airPlayReceiver;
-
-    private readonly BufferedWaveProvider _bufferedWaveProvider;
     private readonly WaveOutEvent _waveOut;
+    private readonly MixingSampleProvider _mixingSampleProvider;
 
-    public AudioPlayService(IAirPlayReceiver airPlayReceiver)
+    private readonly ConcurrentDictionary<DeviceSession, (BufferedWaveProvider, ISampleProvider)> _sampleProviders = [];
+
+    public AudioPlayService(SessionManager sessionManager)
     {
-        _airPlayReceiver = airPlayReceiver ?? throw new ArgumentNullException(nameof(airPlayReceiver));
-
-        var waveFormat = new WaveFormat(44100, 16, 2);
-
-        _bufferedWaveProvider = new(waveFormat)
-        {
-            BufferLength = 10 * waveFormat.AverageBytesPerSecond,
-            DiscardOnBufferOverflow = true
-        };
+        WaveFormat waveFormat = new (44100, 16, 2);
 
         _waveOut = new WaveOutEvent();
+        _mixingSampleProvider = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(44100, 2)) 
+        {
+            ReadFully = true
+        };
+
+        sessionManager.SessionCreated += (_, session) =>
+        {
+            session.AudioControllerCreated += (_, _) =>
+            {
+                BufferedWaveProvider bufferedWaveProvider = new(waveFormat)
+                {
+                    BufferLength = 10 * waveFormat.AverageBytesPerSecond,
+                    DiscardOnBufferOverflow = true
+                };
+
+                session.AudioController!.AudioDataReceived += (sender, e) =>
+                {
+                    bufferedWaveProvider?.AddSamples(e.Data, 0, e.Data.Length);
+                };
+
+                var sampleProvider = bufferedWaveProvider.ToSampleProvider();
+
+                _sampleProviders.TryAdd(session, (bufferedWaveProvider, sampleProvider));
+                _mixingSampleProvider.AddMixerInput(sampleProvider);
+            };
+
+            session.AudioControllerClosed += (_, _) =>
+            {
+                if (_sampleProviders.TryRemove(session, out var audioProvider))
+                    _mixingSampleProvider.RemoveMixerInput(audioProvider.Item2);
+            };
+        };
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _waveOut.Init(_bufferedWaveProvider);
+        _waveOut.Init(_mixingSampleProvider);
         _waveOut.Play();
 
-        _airPlayReceiver.OnPCMDataReceived += AirPlayReceiver_OnPCMDataReceived;
         return Task.CompletedTask;
-    }
-
-    private void AirPlayReceiver_OnPCMDataReceived(object? sender, PcmData e)
-    {
-        //if (e.Data.Any(b => b != 0))
-            _bufferedWaveProvider.AddSamples(e.Data, 0, e.Data.Length);
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

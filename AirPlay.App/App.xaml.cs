@@ -1,9 +1,8 @@
 ﻿using AirPlay.App.Services;
-using AirPlay.Models.Configs;
-using AirPlay.Services;
-using AirPlay.Services.Implementations;
+using AirPlay.App.Windows;
+using AirPlay.Core2.Extensions;
+using AirPlay.Core2.Models.Configs;
 using H.NotifyIcon;
-using Makaretu.Dns;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Dispatching;
@@ -12,6 +11,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.Win32;
+using Serilog;
 using System;
 using System.Runtime.InteropServices;
 using Windows.UI.ViewManagement;
@@ -27,7 +27,10 @@ public partial class App : Application
 
     private TaskbarIcon? TaskbarIcon { get; set; }
 
-    private DispatcherQueue DispatcherQueue { get; init; } = DispatcherQueue.GetForCurrentThread();
+    public static DispatcherQueue DispatcherQueue { get; private set; } = null!;
+
+    [DllImport("kernel32.dll")]
+    static extern bool AllocConsole();
 
     /// <summary>
     /// Initializes the singleton application object.  This is the first line of authored code
@@ -37,33 +40,29 @@ public partial class App : Application
     {
         //AllocConsole();
 
-        _ = SessionManager.Current;
-
         var builder = new HostBuilder()
             .ConfigureServices((hostContext, services) =>
             {
-                services.AddOptions();
-                services.Configure<AirPlayReceiverConfig>(c =>
+                services.UseAirPlayService();
+
+                services.Configure<AirPlayConfig>(c => c.ServiceName = "AirPlay App");
+
+                services.AddSingleton<SmtcControlService>();
+                services.AddHostedService(p => p.GetRequiredService<SmtcControlService>());
+
+                services.AddSingleton<ControlPageVM>();
+                services.AddHostedService<AudioPlayService>();
+                services.AddHostedService<MirrorService>();
+
+                services.AddSerilog(configure =>
                 {
-                    c.AirPlayPort = 7000;
-                    c.AirTunesPort = 5000;
-                    c.Instance = "AirPlay App";
-                    c.DeviceMacAddress = "11:22:33:44:55:66";
+                    configure.WriteTo.Logger(l => l.WriteTo
+                        .Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}][{Level:u3}] <{SourceContext}>: {Message:lj}{NewLine}{Exception}"));
                 });
-
-                services.AddSingleton<MulticastService>();
-                services.AddSingleton<IAirPlayReceiver, AirPlayReceiver>();
-                services.AddHostedService<AirPlayService>();
-                services.AddHostedService<SmtcControlService>();
-
-                services.AddSingleton<AudioPlayService>();
-                services.AddHostedService<AudioPlayService>(p => p.GetRequiredService<AudioPlayService>());
-
-                services.AddSingleton<DacpDiscoveryService>();
-                services.AddHostedService<DacpDiscoveryService>(p => p.GetRequiredService<DacpDiscoveryService>());
             });
 
         Host = builder.Start();
+        Host.Services.GetService<ControlPageVM>();
 
         InitializeComponent();
     }
@@ -74,6 +73,8 @@ public partial class App : Application
     /// <param name="args">Details about the launch request and process.</param>
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        DispatcherQueue = DispatcherQueue.GetForCurrentThread();
+
         XamlUICommand leftButtonCommand = new();
         XamlUICommand command = new()
         {
@@ -83,7 +84,7 @@ public partial class App : Application
         };
 
         command.ExecuteRequested += (s, e) => Current.Exit();
-        //leftButtonCommand.ExecuteRequested += LeftButtonCommand_ExecuteRequested;
+        leftButtonCommand.ExecuteRequested += LeftButtonCommand_ExecuteRequested;
 
         var item = new MenuFlyoutItem()
         {
@@ -116,6 +117,8 @@ public partial class App : Application
         UISettings uISettings = new UISettings();
         uISettings.ColorValuesChanged += UISettings_ColorValuesChanged;
     }
+
+    private void LeftButtonCommand_ExecuteRequested(XamlUICommand sender, ExecuteRequestedEventArgs args) => new ControlWindow().Show();
 
     private void UISettings_ColorValuesChanged(UISettings sender, object args)
     {

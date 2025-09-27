@@ -3,5 +3,6 @@
     <Platform Project="x64" />
     <Deploy />
   </Project>
-  <Project Path="AirPlay.Core/AirPlay.Core/AirPlay.Core.csproj" />
+  <Project Path="Airplay.Core2/AirPlay.Core2/AirPlay.Core2.csproj" />
+  <Project Path="ProducerConsumerStream/Nito.ProducerConsumerStream.csproj" />
 </Solution>

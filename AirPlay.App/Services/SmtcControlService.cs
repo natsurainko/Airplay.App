@@ -1,25 +1,19 @@
-﻿using AirPlay.Models;
-using AirPlay.Models.Audio;
-using AirPlay.Services;
-using AirPlay.Services.Implementations;
+﻿using AirPlay.App.Models;
+using AirPlay.Core2.Models.Messages;
 using Microsoft.Extensions.Hosting;
-using System;
-using System.IO;
-using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.Media;
 using Windows.Media.Playback;
-using Windows.Storage;
-using Windows.Storage.Streams;
 
 namespace AirPlay.App.Services;
 
-class SmtcControlService(IAirPlayReceiver airPlayReceiver, DacpDiscoveryService dacpDiscoveryService) : IHostedService
+public class SmtcControlService : IHostedService
 {
+    private Device? _device;
     private readonly MediaPlayer _player = new();
-    private SystemMediaTransportControlsTimelineProperties? _lastTimeline;
-    private Session? _audioSession;
+    private readonly HttpClient _httpClient = new();
 
     public SystemMediaTransportControls Smtc => _player.SystemMediaTransportControls;
 
@@ -27,11 +21,6 @@ class SmtcControlService(IAirPlayReceiver airPlayReceiver, DacpDiscoveryService 
     {
         _player.CommandManager.IsEnabled = false;
         Smtc.ButtonPressed += Smtc_ButtonPressed;
-
-        airPlayReceiver.OnTrackInfoValueReceived += OnTrackInfoValueReceived;
-        airPlayReceiver.OnPCMDataReceived += OnPCMDataReceived;
-        SessionManager.Current.OnSessionsAddedOrUpdated += OnSessionsAddedOrUpdated;
-        dacpDiscoveryService.OnDacpServiceShutdown += OnDacpServiceShutdown;
 
         return Task.CompletedTask;
     }
@@ -42,117 +31,85 @@ class SmtcControlService(IAirPlayReceiver airPlayReceiver, DacpDiscoveryService 
         return Task.CompletedTask;
     }
 
-    private void OnSessionsAddedOrUpdated(object? sender, Session e)
+    public void SwitchDevice(Device? device)
     {
-        if (_audioSession == null && e.DacpId != null)
+        bool enable = device?.EnableControl ?? false;
+
+        Smtc.IsEnabled = enable;
+        Smtc.IsEnabled = enable;
+        Smtc.IsPlayEnabled = enable;
+        Smtc.IsPauseEnabled = enable;
+        Smtc.IsNextEnabled = enable;
+        Smtc.IsPreviousEnabled = enable;
+
+        _device?.PropertyChanged -= OnPropertyChanged;
+        _device?.Session.MediaWorkInfoReceived -= OnMediaWorkInfoReceived;
+
+        _device = device;
+
+        if (device != null)
         {
-            _audioSession = e;
-            OnDacpServiceFoundChanged(true);
-            return;
+            Smtc.DisplayUpdater.AppMediaId = $"AirPlay ({device.Name})";
+            Smtc.DisplayUpdater.Type = MediaPlaybackType.Music;
+            Smtc.DisplayUpdater.Update();
         }
 
-        if (_audioSession != null && (_audioSession.DacpId == null || _audioSession.DacpEndPoint == null))
-        {
-            _audioSession = null;
-            OnDacpServiceFoundChanged(false);
-        }
-    }
+        Smtc.DisplayUpdater.MusicProperties.Title = _device?.Name ?? string.Empty;
+        Smtc.DisplayUpdater.MusicProperties.Artist = _device?.Artist ?? string.Empty;
+        Smtc.DisplayUpdater.MusicProperties.AlbumTitle = _device?.Album ?? string.Empty;
+        Smtc.PlaybackStatus = _device?.PlaybackStatus ?? MediaPlaybackStatus.Stopped;
 
-    private void OnDacpServiceShutdown(object? sender, System.Net.IPEndPoint e)
-    {
-        if (_audioSession?.DacpEndPoint == null)
-        {
-            _audioSession = null;
-            OnDacpServiceFoundChanged(false);
-        }
-    }
-
-    private void OnDacpServiceFoundChanged(bool e)
-    {
-        Smtc.IsEnabled = e;
-        Smtc.IsPlayEnabled = e;
-        Smtc.IsPauseEnabled = e;
-        Smtc.IsNextEnabled = e;
-        Smtc.IsPreviousEnabled = e;
-
-        Smtc.DisplayUpdater.AppMediaId = "AirPlay";
-        Smtc.DisplayUpdater.Type = MediaPlaybackType.Music;
-        Smtc.DisplayUpdater.Update();
-    }
-
-    private void OnTrackInfoValueReceived(object? sender, TrackInfoValue e)
-    {
-        switch (e.Type)
-        {
-            case TrackInfoType.Name:
-                Smtc.DisplayUpdater.MusicProperties.Title = e.Value.ToString();
-                break;
-            case TrackInfoType.Artist:
-                Smtc.DisplayUpdater.MusicProperties.Artist = e.Value.ToString();
-                break;
-            case TrackInfoType.Album:
-                Smtc.DisplayUpdater.MusicProperties.AlbumTitle = e.Value.ToString();
-                break;
-            case TrackInfoType.Cover:
-                string path = Path.Combine(ApplicationData.Current.LocalFolder.Path, "cover.jpg");
-                File.WriteAllBytes(path, e.Value as byte[] ?? Array.Empty<byte>());
-                Smtc.DisplayUpdater.Thumbnail = RandomAccessStreamReference.CreateFromFile(StorageFile.GetFileFromPathAsync(path).GetAwaiter().GetResult());
-                break;
-            case TrackInfoType.ProgressDuration:
-                var timeline = new SystemMediaTransportControlsTimelineProperties
-                {
-                    StartTime = TimeSpan.Zero,
-                    MinSeekTime = TimeSpan.Zero,
-                    MaxSeekTime = TimeSpan.FromSeconds((long)e.Value),
-                    Position = _lastTimeline?.Position ?? TimeSpan.Zero,
-                    EndTime = TimeSpan.FromSeconds((long)e.Value)
-                };
-                Smtc.UpdateTimelineProperties(timeline);
-                _lastTimeline = timeline;
-                break;
-            case TrackInfoType.ProgressPosition:
-                var _timeline = new SystemMediaTransportControlsTimelineProperties
-                {
-                    StartTime = TimeSpan.Zero,
-                    MinSeekTime = TimeSpan.Zero,
-                    MaxSeekTime = _lastTimeline?.MaxSeekTime ?? TimeSpan.Zero,
-                    Position = TimeSpan.FromSeconds((long)e.Value),
-                    EndTime = _lastTimeline?.EndTime ?? TimeSpan.Zero
-                };
-                Smtc.UpdateTimelineProperties(_timeline);
-                _lastTimeline = _timeline;
-                break;
-            default:
-                break;
-        }
+        //deviceSession.MediaProgressInfoReceived += OnMediaProgressInfoReceived;
+        _device?.Session.MediaWorkInfoReceived += OnMediaWorkInfoReceived;
+        //deviceSession.MediaCoverReceived += OnMediaCoverReceived;
+        _device?.PropertyChanged += OnPropertyChanged;
 
         Smtc.DisplayUpdater.Update();
     }
 
-    private void OnPCMDataReceived(object? sender, PcmData e)
+    private void OnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.Data.Any(b => b != 0))
-            Smtc.PlaybackStatus = MediaPlaybackStatus.Playing;
-        else Smtc.PlaybackStatus = MediaPlaybackStatus.Paused;
+        Smtc.DisplayUpdater.MusicProperties.Title = _device?.Name ?? string.Empty;
+        Smtc.DisplayUpdater.MusicProperties.Artist = _device?.Artist ?? string.Empty;
+        Smtc.DisplayUpdater.MusicProperties.AlbumTitle = _device?.Album ?? string.Empty;
+
+        Smtc.PlaybackStatus = _device?.PlaybackStatus ?? MediaPlaybackStatus.Stopped;
     }
 
     private void Smtc_ButtonPressed(SystemMediaTransportControls sender, SystemMediaTransportControlsButtonPressedEventArgs args)
     {
-        string? command = args.Button switch
+        MediaControlCommand? command = args.Button switch
         {
-            SystemMediaTransportControlsButton.Play => "play",
-            SystemMediaTransportControlsButton.Pause => "pause",
-            SystemMediaTransportControlsButton.Stop => "stop",
-            SystemMediaTransportControlsButton.FastForward => "beginff",
-            SystemMediaTransportControlsButton.Rewind => "beginrew",
-            SystemMediaTransportControlsButton.Next => "nextitem",
-            SystemMediaTransportControlsButton.Previous => "previtem",
+            SystemMediaTransportControlsButton.Play => MediaControlCommand.Play,
+            SystemMediaTransportControlsButton.Pause => MediaControlCommand.Pause,
+            SystemMediaTransportControlsButton.Stop => MediaControlCommand.Stop,
+            //SystemMediaTransportControlsButton.FastForward => MediaControlCommand.,
+            //SystemMediaTransportControlsButton.Rewind => MediaControlCommand.,
+            SystemMediaTransportControlsButton.Next => MediaControlCommand.NextItem,
+            SystemMediaTransportControlsButton.Previous => MediaControlCommand.PrevItem,
             _ => null
         };
 
-        if (string.IsNullOrEmpty(command)) return;
-        if (_audioSession == null) return;
-
-        _ = dacpDiscoveryService.SendCommandAsync(_audioSession, command);
+        SendMediaControlCommand(command);
     }
+
+    public void SendMediaControlCommand(MediaControlCommand? command)
+    {
+        if (command == null) return;
+
+        _device?.Session.SendMediaControlCommandAsync(_httpClient, command.Value);
+    }
+
+    //private void OnMediaProgressInfoReceived(object? sender, MediaProgressInfo e) => App.DispatcherQueue.TryEnqueue(() => ProgressInfo = e);
+
+    private void OnMediaWorkInfoReceived(object? sender, MediaWorkInfo e) => App.DispatcherQueue.TryEnqueue(() =>
+    {
+        Smtc.DisplayUpdater.MusicProperties.Title = e.Name;
+        Smtc.DisplayUpdater.MusicProperties.Artist = e.Artist;
+        Smtc.DisplayUpdater.MusicProperties.AlbumTitle = e.Album;
+
+        Smtc.DisplayUpdater.Update();
+    });
+
+    //private void OnMediaCoverReceived(object? sender, byte[] e) { }
 }

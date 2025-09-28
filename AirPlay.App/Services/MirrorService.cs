@@ -32,7 +32,7 @@ internal class MirrorService(SessionManager sessionManager) : IHostedService
             {
                 if (_mirroringSession.TryRemove(session, out var mirrorWindow))
                 {
-                    App.DispatcherQueue.TryEnqueue(() => mirrorWindow.Close());
+                    //App.DispatcherQueue.TryEnqueue(() => mirrorWindow.Close());
                 }
             };
         };

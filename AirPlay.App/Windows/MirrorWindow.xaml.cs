@@ -3,10 +3,16 @@ using AirPlay.Core2.Models.Messages.Mirror;
 using LibVLCSharp.Platforms.Windows;
 using LibVLCSharp.Shared;
 using Microsoft.UI.Xaml;
-using Nito.ProducerConsumerStream;
+using System;
+using System.Buffers;
+using System.Diagnostics;
 using System.Drawing;
+using System.IO.Pipelines;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Timers;
 using WinUIEx;
+using Timer = System.Timers.Timer;
 
 namespace AirPlay.App.Windows;
 
@@ -16,39 +22,56 @@ public sealed partial class MirrorWindow : WindowEx
     private Media? _media;
     private MediaPlayer? _mediaPlayer;
 
-    private readonly ProducerConsumerStream _producerConsumerStream = new();
+    private readonly Pipe _pipe = new();
+    private readonly Timer _timer = new(TimeSpan.FromSeconds(1));
+
+    private int _frameCount = 0;
 
     public MirrorWindow(DeviceSession deviceSession)
     {
-        InitializeComponent();
-
-        this.ExtendsContentIntoTitleBar = true;
+        Width = 0;
+        Height = 0;
 
         deviceSession.MirrorController!.FrameSizeChanged += OnFrameSizeChanged;
         deviceSession.MirrorController!.H264DataReceived += OnH264DataReceived;
 
+        InitializeComponent();
+
+        this.ExtendsContentIntoTitleBar = true;
+
         VideoView.Initialized += VideoView_Initialized;
         Closed += OnWindowClosed;
 
-        Width = 0;
-        Height = 0;
+        _timer.Elapsed += OnElapsed;
+        _timer.Start();
     }
 
-    private void OnH264DataReceived(object? sender, H264Data e)
+    private void OnElapsed(object? sender, ElapsedEventArgs e)
     {
-        Task.Run(async () =>
+        Debug.WriteLine($"Ö¡ÂÊ: {_frameCount} fps");
+        Interlocked.Exchange(ref _frameCount, 0);
+    }
+
+    private async void OnH264DataReceived(object? sender, H264Data e)
+    {
+        Interlocked.Increment(ref _frameCount);
+
+        try
         {
-            await _producerConsumerStream.Writer.WriteAsync(e.Data, 0, e.Length);
-            await _producerConsumerStream.Writer.FlushAsync();
-        });
+            await _pipe.Writer.WriteAsync(e.Data);
+            //_pipe.Writer.FlushAsync();
+        }
+        catch (Exception ex) 
+        {  
+        }
     }
 
     private void OnFrameSizeChanged(object? sender, Size e)
     {
         App.DispatcherQueue.TryEnqueue(() =>
         {
-            this.Width = e.Width / 2.5;
-            this.Height = e.Height / 2.5;
+            this.Width = e.Width;
+            this.Height = e.Height;
         });
     }
 
@@ -56,31 +79,38 @@ public sealed partial class MirrorWindow : WindowEx
     {
         Task.Run(() =>
         {
-            _mediaPlayer?.Stopped += (s, e) => grid.Children.Remove(VideoView);
             _mediaPlayer?.Stop();
         });
 
-        //_memoryStream?.Close();
-        _producerConsumerStream.Writer.Close();
-        _producerConsumerStream.Reader.Close();
+        _pipe.Writer.Complete();
+        _pipe.Reader.Complete();
 
         _mediaPlayer?.Dispose();
         _media?.Dispose();
         _libvlc?.Dispose();
+
+        _timer.Stop();
+        _timer.Dispose();
     }
 
     private void VideoView_Initialized(object? sender, InitializedEventArgs e)
     {
         Core.Initialize();
 
-        _libvlc = new LibVLC(enableDebugLogs: true, e.SwapChainOptions);
+        _libvlc = new LibVLC(enableDebugLogs: true, [..e.SwapChainOptions, "--h264-fps=60"]);
         _mediaPlayer = new MediaPlayer(_libvlc);
 
-        //_media = new Media(_libvlc, new StreamMediaInput(_memoryStream), ":demux=h264");
-        _media = new Media(_libvlc, new StreamMediaInput(_producerConsumerStream.Reader), ":demux=h264", ":dshow-fps=60");
+        var pipeStream = new PipeReaderStream(_pipe.Reader);
 
-        _mediaPlayer.Play(_media);
+        _media = new Media(_libvlc, new StreamMediaInput(pipeStream), 
+            ":demux=h264",
+            ":network-caching=20",
+            ":live-caching=20",
+            ":clock-jitter=0",
+            ":clock-synchro=0"
+        );
 
         VideoView.MediaPlayer = _mediaPlayer;
+        _mediaPlayer!.Play(_media!);
     }
 }

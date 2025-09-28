@@ -62,7 +62,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Airplay.Core2\AirPlay.Core2\AirPlay.Core2.csproj" />
-    <ProjectReference Include="..\ProducerConsumerStream\Nito.ProducerConsumerStream.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Page Update="Windows\MirrorWindow.xaml">

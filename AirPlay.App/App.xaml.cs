@@ -1,10 +1,13 @@
-﻿using AirPlay.App.Services;
+﻿using AirPlay.App.FFmpeg;
+using AirPlay.App.Services;
 using AirPlay.App.Windows;
 using AirPlay.Core2.Extensions;
 using AirPlay.Core2.Models.Configs;
+using FFmpeg.AutoGen.Bindings.DynamicallyLoaded;
 using H.NotifyIcon;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Graphics.Canvas;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -13,7 +16,9 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.Win32;
 using Serilog;
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
+using Windows.ApplicationModel;
 using Windows.UI.ViewManagement;
 
 namespace AirPlay.App;
@@ -29,15 +34,15 @@ public partial class App : Application
 
     public static DispatcherQueue DispatcherQueue { get; private set; } = null!;
 
-    [DllImport("kernel32.dll")]
-    static extern bool AllocConsole();
-
     /// <summary>
     /// Initializes the singleton application object.  This is the first line of authored code
     /// executed, and as such is the logical equivalent of main() or WinMain().
     /// </summary>
     public App()
     {
+        DynamicallyLoadedBindings.LibrariesPath = Path.Combine(Package.Current.InstalledPath, "Libraries");
+        DynamicallyLoadedBindings.Initialize();
+
         //AllocConsole();
 
         var builder = new HostBuilder()

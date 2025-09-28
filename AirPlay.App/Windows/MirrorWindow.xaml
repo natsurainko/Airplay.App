@@ -5,8 +5,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:AirPlay.App.Windows"
-    xmlns:lvs="using:LibVLCSharp.Platforms.Windows"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:win2d="using:Microsoft.Graphics.Canvas.UI.Xaml"
     xmlns:winuiex="using:WinUIEx"
     Title="MirrorWindow"
     mc:Ignorable="d">
@@ -15,10 +15,7 @@
         <MicaBackdrop />
     </winuiex:WindowEx.SystemBackdrop>
 
-    <Grid x:Name="grid">
-        <lvs:VideoView
-            x:Name="VideoView"
-            HorizontalAlignment="Stretch"
-            VerticalAlignment="Stretch" />
+    <Grid>
+        <win2d:CanvasControl x:Name="Canvas" Draw="Canvas_Draw" />
     </Grid>
 </winuiex:WindowEx>

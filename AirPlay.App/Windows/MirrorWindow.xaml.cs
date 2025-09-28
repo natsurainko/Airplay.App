@@ -4,7 +4,6 @@ using LibVLCSharp.Platforms.Windows;
 using LibVLCSharp.Shared;
 using Microsoft.UI.Xaml;
 using System;
-using System.Buffers;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO.Pipelines;

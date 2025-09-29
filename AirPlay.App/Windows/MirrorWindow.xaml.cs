@@ -17,15 +17,18 @@ namespace AirPlay.App.Windows;
 
 public sealed partial class MirrorWindow : WindowEx
 {
+    private readonly DeviceSession _deviceSession;
     private readonly H264Decoder _h264Decoder = new();
     private readonly Timer _timer = new(TimeSpan.FromSeconds(1));
-    private CanvasDevice _device = CanvasDevice.GetSharedDevice();
+    private readonly CanvasDevice _device = CanvasDevice.GetSharedDevice();
 
     private int _frameCount = 0;
     private CanvasBitmap? frameBitmap;
 
     public MirrorWindow(DeviceSession deviceSession)
     {
+        _deviceSession = deviceSession;
+
         if (deviceSession.MirrorController?.FrameSize != null)
             (Width, Height) = (deviceSession.MirrorController.FrameSize.Value.Width, deviceSession.MirrorController.FrameSize.Value.Height);
         else (Width, Height) = (100, 300);
@@ -92,6 +95,8 @@ public sealed partial class MirrorWindow : WindowEx
 
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        _deviceSession.MirrorController?.H264DataReceived -= OnH264DataReceived;
+
         _timer.Stop();
         _timer.Dispose();
         _h264Decoder.Dispose();
@@ -101,5 +106,11 @@ public sealed partial class MirrorWindow : WindowEx
     {
         if (frameBitmap != null)
             args.DrawingSession.DrawImage(frameBitmap, 0, 0);
+    }
+
+    private void Grid_Unloaded(object sender, RoutedEventArgs e)
+    {
+        this.Canvas.RemoveFromVisualTree();
+        this.Canvas = null;
     }
 }

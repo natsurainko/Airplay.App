@@ -15,7 +15,7 @@
         <MicaBackdrop />
     </winuiex:WindowEx.SystemBackdrop>
 
-    <Grid>
+    <Grid Unloaded="Grid_Unloaded">
         <Viewbox x:Name="Viewbox" Stretch="Uniform">
             <win2d:CanvasControl
                 x:Name="Canvas"

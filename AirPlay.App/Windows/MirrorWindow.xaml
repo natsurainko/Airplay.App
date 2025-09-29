@@ -16,6 +16,11 @@
     </winuiex:WindowEx.SystemBackdrop>
 
     <Grid>
-        <win2d:CanvasControl x:Name="Canvas" Draw="Canvas_Draw" />
+        <Viewbox x:Name="Viewbox" Stretch="Uniform">
+            <win2d:CanvasControl
+                x:Name="Canvas"
+                Margin="0,0,-5,0"
+                Draw="Canvas_Draw" />
+        </Viewbox>
     </Grid>
 </winuiex:WindowEx>

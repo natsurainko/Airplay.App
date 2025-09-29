@@ -1,7 +1,9 @@
+using AirPlay.App.FFmmpeg;
 using AirPlay.Core2.Models;
 using AirPlay.Core2.Models.Messages.Mirror;
 using Microsoft.Graphics.Canvas;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Diagnostics;
 using System.Drawing;
@@ -24,15 +26,23 @@ public sealed partial class MirrorWindow : WindowEx
 
     public MirrorWindow(DeviceSession deviceSession)
     {
-        Width = 0;
-        Height = 0;
+        if (deviceSession.MirrorController?.FrameSize != null)
+            (Width, Height) = (deviceSession.MirrorController.FrameSize.Value.Width, deviceSession.MirrorController.FrameSize.Value.Height);
+        else (Width, Height) = (100, 300);
 
         deviceSession.MirrorController!.FrameSizeChanged += OnFrameSizeChanged;
         deviceSession.MirrorController!.H264DataReceived += OnH264DataReceived;
 
         InitializeComponent();
 
+        Canvas.Width = Width;
+        Canvas.Height = Height;
+
         this.ExtendsContentIntoTitleBar = true;
+
+        //this.IsResizable = false;
+        this.IsMaximizable = false;
+        //this.IsMinimizable = false;
 
         Closed += OnWindowClosed;
 
@@ -42,7 +52,9 @@ public sealed partial class MirrorWindow : WindowEx
 
     private void OnElapsed(object? sender, ElapsedEventArgs e)
     {
+#if DEBUG
         Debug.WriteLine($"Ö¡ÂÊ: {_frameCount} fps");
+#endif
         Interlocked.Exchange(ref _frameCount, 0);
     }
 
@@ -50,7 +62,7 @@ public sealed partial class MirrorWindow : WindowEx
     {
         Interlocked.Increment(ref _frameCount);
 
-        if (_h264Decoder.Decode(e.Data, out var rgbData, out var width, out var height))
+        if (!_h264Decoder.Disposed && _h264Decoder.Decode(e.Data, out var rgbData, out var width, out var height))
         {
             App.DispatcherQueue.TryEnqueue(() =>
             {
@@ -72,8 +84,9 @@ public sealed partial class MirrorWindow : WindowEx
     {
         App.DispatcherQueue.TryEnqueue(() =>
         {
-            this.Width = e.Width;
-            this.Height = e.Height;
+            (Width, Height) = (e.Width, e.Height);
+            Canvas.Width = e.Width;
+            Canvas.Height = e.Height;
         });
     }
 

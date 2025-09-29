@@ -30,6 +30,9 @@ public partial class Device : ObservableObject
     public partial bool ShowVolumeIcon { get; set; }
 
     [ObservableProperty]
+    public partial bool ShowMirrorIcon { get; set; }
+
+    [ObservableProperty]
     public partial BitmapImage? Cover { get; set; }
 
     [ObservableProperty]
@@ -62,11 +65,17 @@ public partial class Device : ObservableObject
         EnableControl = deviceSession.DacpServiceEndPoint != null;
 
         deviceSession.AudioControllerCreated += OnAudioControllerCreated;
+        deviceSession.MirrorControllerCreated += OnMirrorControllerCreated;
+        deviceSession.MirrorControllerClosed += OnMirrorControllerClosed;
         deviceSession.MediaProgressInfoReceived += OnMediaProgressInfoReceived;
         deviceSession.MediaWorkInfoReceived += OnMediaWorkInfoReceived;
         deviceSession.MediaCoverReceived += OnMediaCoverReceived;
         deviceSession.DacpServiceFound += OnDacpServiceFound;
     }
+
+    private void OnMirrorControllerCreated(object? sender, EventArgs e) => App.DispatcherQueue.TryEnqueue(() => ShowMirrorIcon = true);
+
+    private void OnMirrorControllerClosed(object? sender, EventArgs e) => App.DispatcherQueue.TryEnqueue(() => ShowMirrorIcon = false);
 
     private void OnDacpServiceFound(object? sender, EventArgs e) => App.DispatcherQueue.TryEnqueue(() => EnableControl = true);
 
@@ -83,12 +92,15 @@ public partial class Device : ObservableObject
             ? MediaPlaybackStatus.Playing
             : MediaPlaybackStatus.Paused;
 
-        App.DispatcherQueue.TryEnqueue(() =>
+        if (ShowVolumeIcon != value)
         {
-            ShowVolumeIcon = value;
-            PlayPauseTag = value ? "Pause" : "Play";
-            PlayPauseIcon = value ? "\uf8ae" : "\uf5b0";
-        });
+            App.DispatcherQueue.TryEnqueue(() =>
+            {
+                ShowVolumeIcon = value;
+                PlayPauseTag = value ? "Pause" : "Play";
+                PlayPauseIcon = value ? "\uf8ae" : "\uf5b0";
+            });
+        }
     }
 
     private void OnMediaProgressInfoReceived(object? sender, MediaProgressInfo e) => App.DispatcherQueue.TryEnqueue(() => ProgressInfo = e);

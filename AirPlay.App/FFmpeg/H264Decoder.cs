@@ -2,13 +2,15 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 
-namespace AirPlay.App;
+namespace AirPlay.App.FFmmpeg;
 
 public unsafe partial class H264Decoder : IDisposable
 {
     private AVCodecContext* _codecContext;
     private AVFrame* _frame;
     private AVPacket* _packet;
+
+    public bool Disposed { get; private set; }
 
     public H264Decoder()
     {
@@ -84,6 +86,8 @@ public unsafe partial class H264Decoder : IDisposable
 
     public void Dispose()
     {
+        Disposed = true;
+
         if (_frame != null)
         {
             fixed (AVFrame** frame_ptr = &_frame)

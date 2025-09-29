@@ -55,11 +55,18 @@
                                 TextWrapping="NoWrap" />
                         </StackPanel>
 
-                        <StackPanel Grid.Column="3" Orientation="Horizontal">
+                        <StackPanel
+                            Grid.Column="3"
+                            Orientation="Horizontal"
+                            Spacing="16">
                             <FontIcon
                                 x:Name="VolumeIcon"
                                 x:Load="{x:Bind ShowVolumeIcon, Mode=OneWay}"
                                 Glyph="&#xf61f;" />
+                            <FontIcon
+                                x:Name="MirrorIcon"
+                                x:Load="{x:Bind ShowMirrorIcon, Mode=OneWay}"
+                                Glyph="&#xE7C4;" />
                         </StackPanel>
                     </Grid>
                 </DataTemplate>

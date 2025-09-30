@@ -14,13 +14,12 @@ namespace AirPlay.App.Windows;
 
 public sealed partial class MirrorWindow : WindowEx
 {
-    private readonly Size _frameSize;
-
     private readonly Timer _timer = new(TimeSpan.FromSeconds(1));
     private readonly CanvasDevice _device = CanvasDevice.GetSharedDevice();
 
-    private int _frameCount = 0;
-    private CanvasBitmap? frameBitmap;
+    private int _frameCountPerMin = 0;
+    private CanvasBitmap? _frameBitmap;
+    private Size _frameSize;
 
     public MirrorWindow(Size size)
     {
@@ -42,10 +41,10 @@ public sealed partial class MirrorWindow : WindowEx
         _timer.Start();
     }
 
-    private void OnElapsed(object? sender, ElapsedEventArgs e)
+    public void OnFrameSizeChanged(Size size)
     {
-        Debug.WriteLine($"FPS: {_frameCount} ");
-        Interlocked.Exchange(ref _frameCount, 0);
+        (Canvas.Width, Canvas.Height) = (size.Width, size.Height);
+        _frameSize = size;
     }
 
     public void OnFrameDataReceived(byte[] frameData)
@@ -53,14 +52,13 @@ public sealed partial class MirrorWindow : WindowEx
         try
         {
             if (this.WindowState == WindowState.Minimized) return;
-            if (frameBitmap != null)
+            if (_frameBitmap != null)
             {
-                App.DispatcherQueue.TryEnqueue(() => Canvas.Invalidate()); 
+                Canvas.Invalidate();
                 return;
             }
 
-            frameBitmap?.Dispose();
-            frameBitmap = CanvasBitmap.CreateFromBytes
+            _frameBitmap = CanvasBitmap.CreateFromBytes
             (
                 _device,
                 frameData,
@@ -69,29 +67,47 @@ public sealed partial class MirrorWindow : WindowEx
                 global::Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized
             );
 
-            App.DispatcherQueue.TryEnqueue(() => Canvas.Invalidate());
+            Canvas.Invalidate();
+        }
+        catch (Exception)
+        {
+
         }
         finally
         {
-            Interlocked.Increment(ref _frameCount);
+            Interlocked.Increment(ref _frameCountPerMin);
             frameData = null!;
         }
     }
 
+    private void OnElapsed(object? sender, ElapsedEventArgs e)
+    {
+        Debug.WriteLine($"FPS: {_frameCountPerMin} ");
+        Interlocked.Exchange(ref _frameCountPerMin, 0);
+    }
+
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
+        _frameBitmap?.Dispose();
+
         _timer.Stop();
         _timer.Dispose();
     }
 
     private void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
-        if (frameBitmap != null)
-        {
-            args.DrawingSession.DrawImage(frameBitmap);
+        if (_frameBitmap == null) return;
 
-            frameBitmap.Dispose();
-            frameBitmap = null;
+        try
+        {
+            lock (_frameBitmap)
+                args.DrawingSession.DrawImage(_frameBitmap);
+        }
+        catch (ObjectDisposedException) { }
+        finally
+        {
+            _frameBitmap.Dispose();
+            _frameBitmap = null;
         }
     }
 

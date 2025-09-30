@@ -36,6 +36,12 @@ internal class MirrorService(SessionManager sessionManager) : IHostedService
                 {
                     Debug.WriteLine(e);
 
+                    if (_mirroringWindows.TryGetValue(session, out mirrorWindow))
+                    {
+                        App.DispatcherQueue.TryEnqueue(() => mirrorWindow.OnFrameSizeChanged(e));
+                        return;
+                    }
+
                     App.DispatcherQueue.TryEnqueue(() =>
                     {
                         mirrorWindow = new(e);

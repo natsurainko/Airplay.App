@@ -1,11 +1,14 @@
 ﻿using FFmpeg.AutoGen.Abstractions;
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
 
 namespace AirPlay.App.FFmmpeg;
 
 public unsafe partial class H264Decoder : IDisposable
 {
+    private readonly Lock _lock = new();
+
     private readonly AVCodecContext* _codecContext;
     private readonly AVFrame* _frame;
     private readonly AVPacket* _packet;
@@ -34,83 +37,89 @@ public unsafe partial class H264Decoder : IDisposable
 
         if (Disposed) return false;
 
-        fixed (byte* p = h264Data)
+        lock (_lock)
         {
-            ffmpeg.av_packet_unref(_packet);
-            _packet->data = p;
-            _packet->size = h264Data.Length;
-
-            int ret = ffmpeg.avcodec_send_packet(_codecContext, _packet);
-            if (ret < 0) return false;
-
-            ret = ffmpeg.avcodec_receive_frame(_codecContext, _frame);
-            if (ret < 0) return false;
-
-            width = _frame->width;
-            height = _frame->height;
-
-            int rgbStride = width * 4;
-            rgbData = new byte[rgbStride * height];
-
-            AVFrame* rgbFrame = ffmpeg.av_frame_alloc();
-            try
+            fixed (byte* p = h264Data)
             {
-                rgbFrame->format = (int)AVPixelFormat.AV_PIX_FMT_BGRA;
-                rgbFrame->width = width;
-                rgbFrame->height = height;
+                ffmpeg.av_packet_unref(_packet);
+                _packet->data = p;
+                _packet->size = h264Data.Length;
 
-                fixed (byte* prgb = rgbData)
+                int ret = ffmpeg.avcodec_send_packet(_codecContext, _packet);
+                if (ret < 0) return false;
+
+                ret = ffmpeg.avcodec_receive_frame(_codecContext, _frame);
+                if (ret < 0) return false;
+
+                width = _frame->width;
+                height = _frame->height;
+
+                int rgbStride = width * 4;
+                rgbData = new byte[rgbStride * height];
+
+                AVFrame* rgbFrame = ffmpeg.av_frame_alloc();
+                try
                 {
-                    rgbFrame->data[0] = prgb;
-                    rgbFrame->linesize[0] = rgbStride;
+                    rgbFrame->format = (int)AVPixelFormat.AV_PIX_FMT_BGRA;
+                    rgbFrame->width = width;
+                    rgbFrame->height = height;
 
-                    SwsContext* swsCtx = ffmpeg.sws_getContext(
-                        width, height, (AVPixelFormat)_frame->format,
-                        width, height, AVPixelFormat.AV_PIX_FMT_BGRA,
-                        ffmpeg.SWS_FAST_BILINEAR, null, null, null);
+                    fixed (byte* prgb = rgbData)
+                    {
+                        rgbFrame->data[0] = prgb;
+                        rgbFrame->linesize[0] = rgbStride;
 
-                    ffmpeg.sws_scale(
-                        swsCtx,
-                        _frame->data, _frame->linesize, 0, height,
-                        rgbFrame->data, rgbFrame->linesize);
+                        SwsContext* swsCtx = ffmpeg.sws_getContext(
+                            width, height, (AVPixelFormat)_frame->format,
+                            width, height, AVPixelFormat.AV_PIX_FMT_BGRA,
+                            ffmpeg.SWS_FAST_BILINEAR, null, null, null);
 
-                    ffmpeg.sws_freeContext(swsCtx);
+                        ffmpeg.sws_scale(
+                            swsCtx,
+                            _frame->data, _frame->linesize, 0, height,
+                            rgbFrame->data, rgbFrame->linesize);
+
+                        ffmpeg.sws_freeContext(swsCtx);
+                    }
                 }
-            }
-            finally
-            {
-                ffmpeg.av_frame_free(&rgbFrame);
-            }
+                finally
+                {
+                    ffmpeg.av_frame_free(&rgbFrame);
+                }
 
-            return true;
+                return true;
+            }
         }
     }
 
     public void Dispose()
     {
-        Disposed = true;
-
-        if (_frame != null)
+        lock (_lock)
         {
-            fixed (AVFrame** frame_ptr = &_frame)
+            Disposed = true;
+
+            if (_frame != null)
             {
-                ffmpeg.av_frame_free(frame_ptr);
+                fixed (AVFrame** frame_ptr = &_frame)
+                {
+                    ffmpeg.av_frame_free(frame_ptr);
+                }
             }
-        }
 
-        if (_packet != null)
-        {
-            fixed (AVPacket** packet_ptr = &_packet)
+            if (_packet != null)
             {
-                ffmpeg.av_packet_free(packet_ptr);
+                fixed (AVPacket** packet_ptr = &_packet)
+                {
+                    ffmpeg.av_packet_free(packet_ptr);
+                }
             }
-        }
 
-        if (_codecContext != null)
-        {
-            fixed (AVCodecContext** codecContext_ptr = &_codecContext)
+            if (_codecContext != null)
             {
-                ffmpeg.avcodec_free_context(codecContext_ptr);
+                fixed (AVCodecContext** codecContext_ptr = &_codecContext)
+                {
+                    ffmpeg.avcodec_free_context(codecContext_ptr);
+                }
             }
         }
     }

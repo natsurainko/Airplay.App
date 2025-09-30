@@ -1,4 +1,3 @@
-using AirPlay.App.FFmmpeg;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
@@ -29,8 +28,8 @@ public sealed partial class MirrorWindow : WindowEx
 
         InitializeComponent();
 
-        Width = size.Width / ControlWindow.ControlWindowXamlRoot.RasterizationScale / 1.6;
-        Height = size.Height / ControlWindow.ControlWindowXamlRoot.RasterizationScale / 1.6;
+        Width = size.Width / ControlWindow.ControlWindowXamlRoot.RasterizationScale / 1.5;
+        Height = size.Height / ControlWindow.ControlWindowXamlRoot.RasterizationScale / 1.5;
 
         (Canvas.Width, Canvas.Height) = (size.Width, size.Height);
 
@@ -51,12 +50,16 @@ public sealed partial class MirrorWindow : WindowEx
 
     public void OnFrameDataReceived(byte[] frameData)
     {
-        Interlocked.Increment(ref _frameCount);
-
-        if (this.WindowState == WindowState.Minimized) return;
-
-        App.DispatcherQueue.TryEnqueue(() =>
+        try
         {
+            if (this.WindowState == WindowState.Minimized) return;
+            if (frameBitmap != null)
+            {
+                App.DispatcherQueue.TryEnqueue(() => Canvas.Invalidate()); 
+                return;
+            }
+
+            frameBitmap?.Dispose();
             frameBitmap = CanvasBitmap.CreateFromBytes
             (
                 _device,
@@ -66,8 +69,13 @@ public sealed partial class MirrorWindow : WindowEx
                 global::Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized
             );
 
-            Canvas.Invalidate();
-        });
+            App.DispatcherQueue.TryEnqueue(() => Canvas.Invalidate());
+        }
+        finally
+        {
+            Interlocked.Increment(ref _frameCount);
+            frameData = null!;
+        }
     }
 
     private void OnWindowClosed(object sender, WindowEventArgs args)
@@ -79,7 +87,12 @@ public sealed partial class MirrorWindow : WindowEx
     private void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         if (frameBitmap != null)
+        {
             args.DrawingSession.DrawImage(frameBitmap);
+
+            frameBitmap.Dispose();
+            frameBitmap = null;
+        }
     }
 
     private void Grid_Unloaded(object sender, RoutedEventArgs e)

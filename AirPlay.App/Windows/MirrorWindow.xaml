@@ -15,12 +15,99 @@
         <MicaBackdrop />
     </winuiex:WindowEx.SystemBackdrop>
 
-    <Grid Unloaded="Grid_Unloaded">
+    <Grid Loaded="Grid_Loaded" Unloaded="Grid_Unloaded">
+        <Grid.Resources>
+            <ThemeShadow x:Key="SharedShadow" />
+        </Grid.Resources>
+
+        <Border
+            x:Name="Border"
+            Height="48"
+            VerticalAlignment="Top"
+            SizeChanged="Border_SizeChanged" />
+
         <Viewbox x:Name="Viewbox" Stretch="Uniform">
             <win2d:CanvasControl
                 x:Name="Canvas"
                 HorizontalAlignment="Center"
                 Draw="Canvas_Draw" />
         </Viewbox>
+
+        <Popup
+            x:Name="Popup"
+            DesiredPlacement="Top"
+            LightDismissOverlayMode="Off"
+            PlacementTarget="{x:Bind Border}"
+            Shadow="{ThemeResource SharedShadow}"
+            ShouldConstrainToRootBounds="False"
+            Translation="0,0,32"
+            VerticalOffset="-8">
+            <Popup.SystemBackdrop>
+                <DesktopAcrylicBackdrop />
+            </Popup.SystemBackdrop>
+            <Border
+                Padding="16,12"
+                BorderBrush="{ThemeResource ButtonBorderBrushPointerOver}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <Grid Padding="8,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <FontIcon FontSize="16" Glyph="{x:Bind DeviceIcon}" />
+
+                    <StackPanel
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Style="{ThemeResource BaseTextBlockStyle}"
+                            Text="{x:Bind Session.DeviceDisplayName}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource ApplicationSecondaryForegroundThemeBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="{x:Bind Session.DeviceModel}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                    </StackPanel>
+
+                    <StackPanel
+                        Grid.Column="4"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <StackPanel.Resources>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="BorderBrush" Value="Transparent" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="CornerRadius" Value="4" />
+                                </Style>
+                                <Style TargetType="FontIcon">
+                                    <Setter Property="FontSize" Value="10" />
+                                </Style>
+                            </StackPanel.Resources>
+                            <Button Click="MinimizeButton_Click">
+                                <FontIcon Glyph="&#xE921;" />
+                            </Button>
+                            <Button Click="CloseButton_Click">
+                                <FontIcon Glyph="&#xE8BB;" />
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Popup>
     </Grid>
 </winuiex:WindowEx>

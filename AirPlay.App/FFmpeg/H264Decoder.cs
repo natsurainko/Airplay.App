@@ -1,5 +1,6 @@
 ﻿using FFmpeg.AutoGen.Abstractions;
 using System;
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 
@@ -55,7 +56,7 @@ public unsafe partial class H264Decoder : IDisposable
                 height = _frame->height;
 
                 int rgbStride = width * 4;
-                rgbData = new byte[rgbStride * height];
+                rgbData = ArrayPool<byte>.Shared.Rent(rgbStride * height);
 
                 AVFrame* rgbFrame = ffmpeg.av_frame_alloc();
                 try

@@ -1,7 +1,10 @@
+using AirPlay.Core2.Models;
+using H.NotifyIcon;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using System;
+using System.Buffers;
 using System.Diagnostics;
 using System.Drawing;
 using System.Threading;
@@ -21,9 +24,16 @@ public sealed partial class MirrorWindow : WindowEx
     private CanvasBitmap? _frameBitmap;
     private Size _frameSize;
 
-    public MirrorWindow(Size size)
+    public MirrorWindow(DeviceSession session, Size size)
     {
+        Session = session;
         _frameSize = size;
+
+        //this.IsMinimizable = false;
+        this.IsMaximizable = false;
+
+        this.IsTitleBarVisible = false;
+        this.ExtendsContentIntoTitleBar = true;
 
         InitializeComponent();
 
@@ -31,9 +41,6 @@ public sealed partial class MirrorWindow : WindowEx
         Height = size.Height / ControlWindow.ControlWindowXamlRoot.RasterizationScale / 1.5;
 
         (Canvas.Width, Canvas.Height) = (size.Width, size.Height);
-
-        this.ExtendsContentIntoTitleBar = true;
-        this.IsMaximizable = false;
 
         Closed += OnWindowClosed;
 
@@ -76,7 +83,7 @@ public sealed partial class MirrorWindow : WindowEx
         finally
         {
             Interlocked.Increment(ref _frameCountPerMin);
-            frameData = null!;
+            ArrayPool<byte>.Shared.Return(frameData);
         }
     }
 
@@ -116,4 +123,52 @@ public sealed partial class MirrorWindow : WindowEx
         this.Canvas.RemoveFromVisualTree();
         this.Canvas = null;
     }
+
+    public string DeviceIcon
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(Session.DeviceModel)) return "\ue7f4";
+            if (Session.DeviceModel.Contains("Phone")) return "\ue8ea";
+            if (Session.DeviceModel.Contains("Pad")) return "\ue70a";
+
+            return "\ue7f4";
+        }
+    }
+
+    public DeviceSession Session { get; private set; }
+
+    private void Grid_Loaded(object sender, RoutedEventArgs e)
+    {
+        Popup.IsOpen = true;
+
+        this.AppWindow.TitleBar.SetDragRectangles(
+        [
+            new()
+            {
+                X = 0,
+                Y = 0,
+                Width = (int)(Border.ActualWidth * Border.XamlRoot.RasterizationScale),
+                Height = (int)(48 * Border.XamlRoot.RasterizationScale)
+            }
+        ]);
+    }
+
+    private void Border_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        this.AppWindow.TitleBar.SetDragRectangles(
+        [ 
+            new()
+            {
+                X = 0,
+                Y = 0,
+                Width = (int)(Border.ActualWidth * Border.XamlRoot.RasterizationScale),
+                Height = (int)(48 * Border.XamlRoot.RasterizationScale)
+            }
+        ]);
+    }
+
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e) => this.Minimize();
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e) => this.Close();
 }

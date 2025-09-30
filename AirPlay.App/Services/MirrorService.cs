@@ -44,7 +44,7 @@ internal class MirrorService(SessionManager sessionManager) : IHostedService
 
                     App.DispatcherQueue.TryEnqueue(() =>
                     {
-                        mirrorWindow = new(e);
+                        mirrorWindow = new(session, e);
                         mirrorWindow.Show();
 
                         _mirroringWindows.TryAdd(session, mirrorWindow);

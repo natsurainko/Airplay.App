@@ -1,4 +1,5 @@
-﻿using AirPlay.App.Services;
+﻿using AirPlay.App.Extensions;
+using AirPlay.App.Services;
 using AirPlay.App.Windows;
 using AirPlay.Core2.Extensions;
 using AirPlay.Core2.Models.Configs;
@@ -18,6 +19,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using Windows.ApplicationModel;
 using Windows.UI.ViewManagement;
+using WinUIEx;
 
 namespace AirPlay.App;
 
@@ -38,6 +40,8 @@ public partial class App : Application
     /// </summary>
     public App()
     {
+        this.UnhandledException += (_, e) => System.Windows.Forms.MessageBox.Show(e.Message + e.Exception.ToString());
+
         DynamicallyLoadedBindings.LibrariesPath = Path.Combine(Package.Current.InstalledPath, "Libraries");
         DynamicallyLoadedBindings.Initialize();
 
@@ -55,6 +59,8 @@ public partial class App : Application
                 services.AddHostedService<AudioPlayService>();
                 services.AddHostedService<MirrorService>();
 
+                services.AddSingleton<ControlWindow>();
+
                 services.AddSerilog(configure =>
                 {
                     configure.WriteTo.Logger(l => l.WriteTo
@@ -64,6 +70,7 @@ public partial class App : Application
 
         Host = builder.Start();
         Host.Services.GetService<ControlPageVM>();
+        Host.Services.GetService<ControlWindow>();
 
         InitializeComponent();
     }
@@ -95,7 +102,7 @@ public partial class App : Application
 
         TaskbarIcon = new()
         {
-            ContextMenuMode = ContextMenuMode.SecondWindow,
+            ContextMenuMode = ContextMenuMode.PopupMenu,
             ToolTipText = "AirPlay App",
             NoLeftClickDelay = true,
             IconSource = GetIconTheme(ShouldSystemUseDarkMode()),
@@ -112,14 +119,21 @@ public partial class App : Application
                 }
             }
         };
-
         TaskbarIcon.ForceCreate(false);
 
-        UISettings uISettings = new UISettings();
+        UISettings uISettings = new();
         uISettings.ColorValuesChanged += UISettings_ColorValuesChanged;
+
+        Host.Services.GetRequiredService<ControlWindow>().Activate();
     }
 
-    private void LeftButtonCommand_ExecuteRequested(XamlUICommand sender, ExecuteRequestedEventArgs args) => new ControlWindow().Show();
+    private void LeftButtonCommand_ExecuteRequested(XamlUICommand sender, ExecuteRequestedEventArgs args) => App.DispatcherQueue.TryEnqueue(() =>
+    {
+        ControlWindow controlWindow = Host.Services.GetRequiredService<ControlWindow>();
+        controlWindow.Activate();
+        controlWindow.SetForegroundWindow();
+        controlWindow.SetFocus();
+    });
 
     private void UISettings_ColorValuesChanged(UISettings sender, object args)
     {

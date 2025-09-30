@@ -1,9 +1,7 @@
 using AirPlay.App.FFmmpeg;
-using AirPlay.Core2.Models;
-using AirPlay.Core2.Models.Messages.Mirror;
 using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Diagnostics;
 using System.Drawing;
@@ -17,35 +15,27 @@ namespace AirPlay.App.Windows;
 
 public sealed partial class MirrorWindow : WindowEx
 {
-    private readonly DeviceSession _deviceSession;
-    private readonly H264Decoder _h264Decoder = new();
+    private readonly Size _frameSize;
+
     private readonly Timer _timer = new(TimeSpan.FromSeconds(1));
     private readonly CanvasDevice _device = CanvasDevice.GetSharedDevice();
 
     private int _frameCount = 0;
     private CanvasBitmap? frameBitmap;
 
-    public MirrorWindow(DeviceSession deviceSession)
+    public MirrorWindow(Size size)
     {
-        _deviceSession = deviceSession;
-
-        if (deviceSession.MirrorController?.FrameSize != null)
-            (Width, Height) = (deviceSession.MirrorController.FrameSize.Value.Width, deviceSession.MirrorController.FrameSize.Value.Height);
-        else (Width, Height) = (100, 300);
-
-        deviceSession.MirrorController!.FrameSizeChanged += OnFrameSizeChanged;
-        deviceSession.MirrorController!.H264DataReceived += OnH264DataReceived;
+        _frameSize = size;
 
         InitializeComponent();
 
-        Canvas.Width = Width;
-        Canvas.Height = Height;
+        Width = size.Width / ControlWindow.ControlWindowXamlRoot.RasterizationScale / 1.6;
+        Height = size.Height / ControlWindow.ControlWindowXamlRoot.RasterizationScale / 1.6;
+
+        (Canvas.Width, Canvas.Height) = (size.Width, size.Height);
 
         this.ExtendsContentIntoTitleBar = true;
-
-        //this.IsResizable = false;
         this.IsMaximizable = false;
-        //this.IsMinimizable = false;
 
         Closed += OnWindowClosed;
 
@@ -55,57 +45,41 @@ public sealed partial class MirrorWindow : WindowEx
 
     private void OnElapsed(object? sender, ElapsedEventArgs e)
     {
-#if DEBUG
-        Debug.WriteLine($"Ö¡ÂÊ: {_frameCount} fps");
-#endif
+        Debug.WriteLine($"FPS: {_frameCount} ");
         Interlocked.Exchange(ref _frameCount, 0);
     }
 
-    private void OnH264DataReceived(object? sender, H264Data e)
+    public void OnFrameDataReceived(byte[] frameData)
     {
         Interlocked.Increment(ref _frameCount);
 
-        if (!_h264Decoder.Disposed && _h264Decoder.Decode(e.Data, out var rgbData, out var width, out var height))
-        {
-            App.DispatcherQueue.TryEnqueue(() =>
-            {
-                frameBitmap = CanvasBitmap.CreateFromBytes
-                (
-                    _device,
-                    rgbData,
-                    width,
-                    height,
-                    global::Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized
-                );
+        if (this.WindowState == WindowState.Minimized) return;
 
-                Canvas.Invalidate();
-            });
-        }
-    }
-
-    private void OnFrameSizeChanged(object? sender, Size e)
-    {
         App.DispatcherQueue.TryEnqueue(() =>
         {
-            (Width, Height) = (e.Width, e.Height);
-            Canvas.Width = e.Width;
-            Canvas.Height = e.Height;
+            frameBitmap = CanvasBitmap.CreateFromBytes
+            (
+                _device,
+                frameData,
+                _frameSize.Width,
+                _frameSize.Height,
+                global::Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized
+            );
+
+            Canvas.Invalidate();
         });
     }
 
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
-        _deviceSession.MirrorController?.H264DataReceived -= OnH264DataReceived;
-
         _timer.Stop();
         _timer.Dispose();
-        _h264Decoder.Dispose();
     }
 
-    private void Canvas_Draw(Microsoft.Graphics.Canvas.UI.Xaml.CanvasControl sender, Microsoft.Graphics.Canvas.UI.Xaml.CanvasDrawEventArgs args)
+    private void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         if (frameBitmap != null)
-            args.DrawingSession.DrawImage(frameBitmap, 0, 0);
+            args.DrawingSession.DrawImage(frameBitmap);
     }
 
     private void Grid_Unloaded(object sender, RoutedEventArgs e)

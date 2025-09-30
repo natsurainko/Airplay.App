@@ -9,7 +9,7 @@
     xmlns:model="using:AirPlay.App.Models"
     mc:Ignorable="d">
 
-    <Grid>
+    <Grid Loaded="Grid_Loaded">
         <Grid.Resources>
             <ThemeShadow x:Name="SharedShadow" />
         </Grid.Resources>
@@ -24,11 +24,6 @@
             Margin="8"
             ItemsSource="{x:Bind VM.Devices}"
             SelectedItem="{x:Bind VM.Device, Mode=TwoWay}">
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListView">
-                    <Setter Property="Padding" Value="0" />
-                </Style>
-            </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="model:Device">
                     <Grid Padding="8">

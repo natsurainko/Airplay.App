@@ -6,9 +6,9 @@ namespace AirPlay.App.FFmmpeg;
 
 public unsafe partial class H264Decoder : IDisposable
 {
-    private AVCodecContext* _codecContext;
-    private AVFrame* _frame;
-    private AVPacket* _packet;
+    private readonly AVCodecContext* _codecContext;
+    private readonly AVFrame* _frame;
+    private readonly AVPacket* _packet;
 
     public bool Disposed { get; private set; }
 
@@ -31,6 +31,8 @@ public unsafe partial class H264Decoder : IDisposable
     {
         rgbData = null;
         width = height = 0;
+
+        if (Disposed) return false;
 
         fixed (byte* p = h264Data)
         {

@@ -1,3 +1,4 @@
+using AirPlay.App.Extensions;
 using AirPlay.App.Models;
 using AirPlay.App.Services;
 using AirPlay.Core2.Models;
@@ -10,18 +11,19 @@ using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using WinUIEx;
 
 namespace AirPlay.App.Windows;
-
 
 public sealed partial class ControlPage : Page
 {
     private readonly SmtcControlService _smtcControlService = ((App)App.Current).Host.Services.GetService<SmtcControlService>()!;
 
-    public ControlPageVM VM { get; } = ((App)App.Current).Host.Services.GetService<ControlPageVM>()!;
+    public ControlPageVM VM => (ControlPageVM)DataContext;
 
     public ControlPage()
     {
+        this.DataContext = ((App)App.Current).Host.Services.GetService<ControlPageVM>()!;
         InitializeComponent();
     }
 
@@ -31,6 +33,18 @@ public sealed partial class ControlPage : Page
 
         if (Enum.TryParse<MediaControlCommand>(button.Tag.ToString(), out var command))
             _smtcControlService.SendMediaControlCommand(command);
+    }
+
+    private void Grid_Loaded(object sender, RoutedEventArgs e)
+    {
+        ControlWindow controlWindow = ((App)App.Current).Host.Services.GetRequiredService<ControlWindow>();
+        controlWindow.SetFocus();
+
+        controlWindow.Activated += (_, args) =>
+        {
+            if (args.WindowActivationState == WindowActivationState.Deactivated)
+                controlWindow.Hide();
+        };
     }
 }
 
@@ -58,7 +72,10 @@ public partial class ControlPageVM : ObservableObject
         _sessionManager.SessionClosed += OnSessionClosed;
     }
 
-    partial void OnDeviceChanged(Device? value) => _smtcControlService.SwitchDevice(value);
+    partial void OnDeviceChanged(Device? value)
+    {
+        _smtcControlService.SwitchDevice(value);
+    }
 
     private void OnSessionCreated(object? sender, DeviceSession e)
     {

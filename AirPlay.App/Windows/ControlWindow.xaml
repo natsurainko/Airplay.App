@@ -7,13 +7,12 @@
     xmlns:local="using:AirPlay.App.Windows"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:winuiex="using:WinUIEx"
-    Title="ControlWindow"
-    Activated="WindowEx_Activated"
+    Title="AirPlay Control Window"
     mc:Ignorable="d">
 
     <winuiex:WindowEx.SystemBackdrop>
         <DesktopAcrylicBackdrop />
     </winuiex:WindowEx.SystemBackdrop>
 
-    <local:ControlPage />
+    <Frame x:Name="Frame" Loaded="Frame_Loaded" />
 </winuiex:WindowEx>

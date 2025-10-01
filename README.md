@@ -1,11 +1,17 @@
-# Airplay.App
+## AirPlay Windows App
+一个支持多设备同时连接的 AirPlay 接收器，支持实时音频流、屏幕镜像、支持双向控制。  
+使用 dotnet 10 编译、 WinUI 3 框架开发，具有良好的性能。
 
-#### 让 Windows 作为 AirPlay 的接收播放器，并支持 SMTC 反向控制设备
+核心功能实现请参阅 [AirPlay.Core2](https://github.com/natsurainko/AirPlay.Core2) 项目  
 
-**Windows 上的 AirPlay 效果**  
+### 功能
 
-<img width="409" height="621" alt="QQ_1758459678702" src="https://github.com/user-attachments/assets/7fa292d9-8685-495a-9f8f-e8b9534b8fde" />
++ [x] 支持多个设备同时连接到 AirPlay 接收端
++ [x] 支持多设备 ALAC、AAC、AAC-ELD 格式的音频流投送
++ [x] 支持多设备 H.264 格式的屏幕镜像流投送
++ [x] 支持系统媒体传输控件（Smtc）来反向控制音频连接
 
-**iPad 上的 AirPlay 效果**  
+### 屏幕截图
 
-<img width="2224" height="1668" alt="IMG_0010" src="https://github.com/user-attachments/assets/39400565-ea5b-490f-8282-87ce3154f7c7" />
+<img width="1467" height="930" alt="e1dd854e4188aab975c65aced5c8251a" src="https://github.com/user-attachments/assets/89d5ba3b-6dc1-49e1-bfb5-885177946ff5" />
+

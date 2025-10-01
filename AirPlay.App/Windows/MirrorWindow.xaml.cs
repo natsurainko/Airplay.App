@@ -1,8 +1,8 @@
 using AirPlay.Core2.Models;
-using H.NotifyIcon;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Buffers;
 using System.Diagnostics;
@@ -170,5 +170,7 @@ public sealed partial class MirrorWindow : WindowEx
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e) => this.Minimize();
 
-    private void CloseButton_Click(object sender, RoutedEventArgs e) => this.Close();
+    private async void CloseButton_Click(object sender, RoutedEventArgs e) => await ConfirmDialog.ShowAsync();
+
+    private void ConfirmDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args) => Session.Disconnect();
 }

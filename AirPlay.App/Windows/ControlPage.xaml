@@ -14,13 +14,8 @@
             <ThemeShadow x:Name="SharedShadow" />
         </Grid.Resources>
 
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="8" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
-
         <ListView
+            x:Name="ListView"
             Margin="8"
             ItemsSource="{x:Bind VM.Devices}"
             SelectedItem="{x:Bind VM.Device, Mode=TwoWay}">
@@ -68,89 +63,6 @@
             </ListView.ItemTemplate>
         </ListView>
 
-        <Border
-            x:Name="ControlBorder"
-            Grid.Row="2"
-            Margin="16"
-            Padding="8"
-            x:Load="{x:Bind VM.ShowControlBorder, Mode=OneWay}"
-            Background="{ThemeResource NavigationViewUnfoldedPaneBackground}"
-            BorderBrush="{ThemeResource ButtonBorderBrushPointerOver}"
-            BorderThickness="1"
-            CornerRadius="8"
-            Shadow="{ThemeResource SharedShadow}"
-            Translation="0,0,32">
-
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <Border
-                    Width="48"
-                    Height="48"
-                    BorderBrush="{ThemeResource IconBorder}"
-                    BorderThickness="2"
-                    CornerRadius="4">
-                    <Border CornerRadius="4">
-                        <Image
-                            Width="48"
-                            Height="48"
-                            Source="{x:Bind VM.Device.Cover, Mode=OneWay}" />
-                    </Border>
-                </Border>
-
-                <StackPanel
-                    Grid.Column="1"
-                    Margin="8,0"
-                    VerticalAlignment="Center">
-                    <TextBlock
-                        Style="{ThemeResource BaseTextBlockStyle}"
-                        Text="{x:Bind VM.Device.Name, Mode=OneWay}"
-                        TextTrimming="CharacterEllipsis"
-                        TextWrapping="NoWrap" />
-                    <TextBlock
-                        Foreground="{ThemeResource ApplicationSecondaryForegroundThemeBrush}"
-                        Style="{ThemeResource CaptionTextBlockStyle}"
-                        Text="{x:Bind VM.Device.Artist, Mode=OneWay}"
-                        TextTrimming="CharacterEllipsis"
-                        TextWrapping="NoWrap" />
-                </StackPanel>
-
-                <ContentControl
-                    Grid.Column="3"
-                    Padding="8"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    IsEnabled="{x:Bind VM.Device.EnableControl, Mode=OneWay}">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <StackPanel.Resources>
-                            <Style TargetType="Button">
-                                <Setter Property="Background" Value="Transparent" />
-                                <Setter Property="BorderBrush" Value="Transparent" />
-                                <Setter Property="BorderThickness" Value="0" />
-                                <Setter Property="CornerRadius" Value="4" />
-                            </Style>
-                            <Style TargetType="FontIcon">
-                                <Setter Property="FontSize" Value="14" />
-                            </Style>
-                        </StackPanel.Resources>
-                        <Button Click="ControlButton_Click" Tag="PrevItem">
-                            <FontIcon Glyph="&#xF8AC;" />
-                        </Button>
-                        <Button Click="ControlButton_Click" Tag="{x:Bind VM.Device.PlayPauseTag, Mode=OneWay}">
-                            <FontIcon Glyph="{x:Bind VM.Device.PlayPauseIcon, Mode=OneWay}" />
-                        </Button>
-                        <Button Click="ControlButton_Click" Tag="NextItem">
-                            <FontIcon Glyph="&#xF8AD;" />
-                        </Button>
-                    </StackPanel>
-                </ContentControl>
-            </Grid>
-        </Border>
-
         <StackPanel
             x:Name="EmptyInfo"
             HorizontalAlignment="Center"
@@ -174,5 +86,185 @@
                     Text="Connected devices will be displayed here" />
             </StackPanel>
         </StackPanel>
+
+        <Popup
+            x:Name="ControlPopup"
+            DesiredPlacement="Bottom"
+            HorizontalOffset="-16"
+            LightDismissOverlayMode="Off"
+            PlacementTarget="{x:Bind ListView}"
+            Shadow="{ThemeResource SharedShadow}"
+            ShouldConstrainToRootBounds="False"
+            Translation="0,0,32"
+            VerticalOffset="8">
+            <Popup.Transitions>
+                <TransitionCollection>
+                    <PopupThemeTransition />
+                </TransitionCollection>
+            </Popup.Transitions>
+            <Popup.SystemBackdrop>
+                <DesktopAcrylicBackdrop />
+            </Popup.SystemBackdrop>
+            <Border
+                Grid.Row="2"
+                Width="388"
+                Margin="16"
+                Padding="8"
+                BorderBrush="{ThemeResource ButtonBorderBrushPointerOver}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Translation="0,0,128">
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border
+                        Width="48"
+                        Height="48"
+                        BorderBrush="{ThemeResource IconBorder}"
+                        BorderThickness="2"
+                        CornerRadius="4">
+                        <Border CornerRadius="4">
+                            <Image
+                                Width="48"
+                                Height="48"
+                                Source="{x:Bind VM.Device.Cover, Mode=OneWay}" />
+                        </Border>
+                    </Border>
+
+                    <StackPanel
+                        Grid.Column="1"
+                        Margin="8,0"
+                        VerticalAlignment="Center">
+                        <TextBlock
+                            Margin="0,-2,0,0"
+                            Style="{ThemeResource BaseTextBlockStyle}"
+                            Text="{x:Bind VM.Device.PlayingItemName, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                        <TextBlock
+                            Foreground="{ThemeResource ApplicationSecondaryForegroundThemeBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="{x:Bind VM.Device.Artist, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap"
+                            Visibility="Collapsed" />
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource ApplicationSecondaryForegroundThemeBrush}"
+                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                Text="{x:Bind VM.Device.Session.DeviceModel, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap" />
+                            <FontIcon
+                                Margin="0,2,0,0"
+                                VerticalAlignment="Center"
+                                FontSize="10"
+                                Glyph="&#xEA62;" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource ApplicationSecondaryForegroundThemeBrush}"
+                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                Text="AirPlay"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <ContentControl
+                        Grid.Column="3"
+                        Padding="8"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        IsEnabled="{x:Bind VM.Device.EnableControl, Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <StackPanel.Resources>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="BorderBrush" Value="Transparent" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="CornerRadius" Value="4" />
+                                </Style>
+                                <Style TargetType="FontIcon">
+                                    <Setter Property="FontSize" Value="14" />
+                                </Style>
+                            </StackPanel.Resources>
+                            <Button Click="ControlButton_Click" Tag="PrevItem">
+                                <FontIcon Glyph="&#xF8AC;" />
+                            </Button>
+                            <Button Click="ControlButton_Click" Tag="{x:Bind VM.Device.PlayPauseTag, Mode=OneWay}">
+                                <FontIcon Glyph="{x:Bind VM.Device.PlayPauseIcon, Mode=OneWay}" />
+                            </Button>
+                            <Button Click="ControlButton_Click" Tag="NextItem">
+                                <FontIcon Glyph="&#xF8AD;" />
+                            </Button>
+                        </StackPanel>
+                    </ContentControl>
+                </Grid>
+            </Border>
+        </Popup>
+
+        <Popup
+            x:Name="VolumePopup"
+            DesiredPlacement="Bottom"
+            HorizontalOffset="-16"
+            LightDismissOverlayMode="Off"
+            PlacementTarget="{x:Bind ListView}"
+            Shadow="{ThemeResource SharedShadow}"
+            ShouldConstrainToRootBounds="False"
+            Translation="0,0,32"
+            VerticalOffset="80">
+            <Popup.Transitions>
+                <TransitionCollection>
+                    <PopupThemeTransition />
+                </TransitionCollection>
+            </Popup.Transitions>
+            <Popup.SystemBackdrop>
+                <DesktopAcrylicBackdrop />
+            </Popup.SystemBackdrop>
+            <Border
+                Grid.Row="2"
+                Width="388"
+                Margin="16"
+                Padding="16,4"
+                BorderBrush="{ThemeResource ButtonBorderBrushPointerOver}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Translation="0,0,128">
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <FontIcon
+                        Grid.Column="0"
+                        FontSize="16"
+                        Glyph="&#xE992;" />
+
+                    <Slider
+                        Grid.Column="1"
+                        Margin="16,0"
+                        HorizontalAlignment="Stretch"
+                        Maximum="100"
+                        Minimum="0"
+                        SmallChange="6"
+                        StepFrequency="6"
+                        Value="{x:Bind VM.Device.Volume, Mode=TwoWay}" />
+
+                    <FontIcon
+                        Grid.Column="2"
+                        FontSize="16"
+                        Glyph="&#xE995;" />
+                </Grid>
+            </Border>
+        </Popup>
     </Grid>
 </Page>

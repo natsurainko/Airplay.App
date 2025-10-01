@@ -1,4 +1,5 @@
-﻿using AirPlay.Core2.Models;
+﻿using AirPlay.Core2.Extensions;
+using AirPlay.Core2.Models;
 using AirPlay.Core2.Models.Messages;
 using AirPlay.Core2.Models.Messages.Audio;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -6,12 +7,16 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using Windows.Media;
 
 namespace AirPlay.App.Models;
 
 public partial class Device : ObservableObject
 {
+    private static readonly HttpClient _httpClient = new();
+    private readonly Action<double> _setVolumeAction;
+
     public DeviceSession Session { get; private set; }
 
     public string DeviceIcon
@@ -36,7 +41,7 @@ public partial class Device : ObservableObject
     public partial BitmapImage? Cover { get; set; }
 
     [ObservableProperty]
-    public partial string? Name { get; set; }
+    public partial string? PlayingItemName { get; set; }
 
     [ObservableProperty]
     public partial string? Artist { get; set; }
@@ -57,20 +62,37 @@ public partial class Device : ObservableObject
     public partial string PlayPauseTag { get; set; } = "Play";
 
     [ObservableProperty]
+    public partial double Volume { get; set; }
+
+    [ObservableProperty]
     public partial MediaPlaybackStatus PlaybackStatus { get; set; }
 
     public Device(DeviceSession deviceSession)
     {
         Session = deviceSession;
         EnableControl = deviceSession.DacpServiceEndPoint != null;
+        Volume = deviceSession.Volume;
 
         deviceSession.AudioControllerCreated += OnAudioControllerCreated;
+
         deviceSession.MirrorControllerCreated += OnMirrorControllerCreated;
         deviceSession.MirrorControllerClosed += OnMirrorControllerClosed;
+
         deviceSession.MediaProgressInfoReceived += OnMediaProgressInfoReceived;
         deviceSession.MediaWorkInfoReceived += OnMediaWorkInfoReceived;
         deviceSession.MediaCoverReceived += OnMediaCoverReceived;
+        deviceSession.RemoteSetVolumeRequest += OnRemoteSetVolumeRequest;
+
         deviceSession.DacpServiceFound += OnDacpServiceFound;
+
+        _setVolumeAction = (arg) => _ = Session.SetVolumeAsync(arg, _httpClient);
+        _setVolumeAction = _setVolumeAction.Debounce(500);
+    }
+
+    partial void OnVolumeChanged(double value)
+    {
+        if (Session.Volume == value) return;
+        _setVolumeAction(value);
     }
 
     private void OnMirrorControllerCreated(object? sender, EventArgs e) => App.DispatcherQueue.TryEnqueue(() => ShowMirrorIcon = true);
@@ -83,6 +105,8 @@ public partial class Device : ObservableObject
     {
         Session.AudioController?.AudioDataReceived += OnAudioDataReceived;
     }
+
+    private void OnRemoteSetVolumeRequest(object? sender, double e) => App.DispatcherQueue.TryEnqueue(() => Volume = e);
 
     private void OnAudioDataReceived(object? sender, PcmAudioData e)
     {
@@ -107,7 +131,7 @@ public partial class Device : ObservableObject
 
     private void OnMediaWorkInfoReceived(object? sender, MediaWorkInfo e) => App.DispatcherQueue.TryEnqueue(() =>
     {
-        Name = e.Name;
+        PlayingItemName = e.Name;
         Artist = e.Artist;
         Album = e.Album;
     });

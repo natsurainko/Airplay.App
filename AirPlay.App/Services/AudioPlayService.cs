@@ -36,15 +36,18 @@ class AudioPlayService : IHostedService
                     DiscardOnBufferOverflow = true
                 };
 
+                var offsetSampleProvider = new OffsetSampleProvider(bufferedWaveProvider.ToSampleProvider());
+                offsetSampleProvider.DelayBy = session.VolumeDelay;
+                var volumeSampleProvider = new VolumeSampleProvider(offsetSampleProvider);
+
                 session.AudioController!.AudioDataReceived += (sender, e) =>
                 {
+                    volumeSampleProvider.Volume = (float)(session.Volume / 100);
                     bufferedWaveProvider?.AddSamples(e.Data, 0, e.Data.Length);
                 };
 
-                var sampleProvider = bufferedWaveProvider.ToSampleProvider();
-
-                _sampleProviders.TryAdd(session, (bufferedWaveProvider, sampleProvider));
-                _mixingSampleProvider.AddMixerInput(sampleProvider);
+                _sampleProviders.TryAdd(session, (bufferedWaveProvider, volumeSampleProvider));
+                _mixingSampleProvider.AddMixerInput(volumeSampleProvider);
             };
 
             session.AudioControllerClosed += (_, _) =>

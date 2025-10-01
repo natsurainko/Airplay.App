@@ -18,7 +18,7 @@ public sealed partial class ControlWindow : WindowEx
     public ControlWindow()
     {
         this.Width = 400;
-        this.Height = 560;
+        this.Height = 320;
 
         this.ExtendsContentIntoTitleBar = true;
         this.IsTitleBarVisible = false;

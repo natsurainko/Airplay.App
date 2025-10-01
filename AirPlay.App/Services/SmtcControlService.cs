@@ -49,12 +49,12 @@ public class SmtcControlService : IHostedService
 
         if (device != null)
         {
-            Smtc.DisplayUpdater.AppMediaId = $"AirPlay ({device.Name})";
+            Smtc.DisplayUpdater.AppMediaId = $"AirPlay ({device.PlayingItemName})";
             Smtc.DisplayUpdater.Type = MediaPlaybackType.Music;
             Smtc.DisplayUpdater.Update();
         }
 
-        Smtc.DisplayUpdater.MusicProperties.Title = _device?.Name ?? string.Empty;
+        Smtc.DisplayUpdater.MusicProperties.Title = _device?.PlayingItemName ?? string.Empty;
         Smtc.DisplayUpdater.MusicProperties.Artist = _device?.Artist ?? string.Empty;
         Smtc.DisplayUpdater.MusicProperties.AlbumTitle = _device?.Album ?? string.Empty;
         Smtc.PlaybackStatus = _device?.PlaybackStatus ?? MediaPlaybackStatus.Stopped;
@@ -69,7 +69,7 @@ public class SmtcControlService : IHostedService
 
     private void OnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        Smtc.DisplayUpdater.MusicProperties.Title = _device?.Name ?? string.Empty;
+        Smtc.DisplayUpdater.MusicProperties.Title = _device?.PlayingItemName ?? string.Empty;
         Smtc.DisplayUpdater.MusicProperties.Artist = _device?.Artist ?? string.Empty;
         Smtc.DisplayUpdater.MusicProperties.AlbumTitle = _device?.Album ?? string.Empty;
 

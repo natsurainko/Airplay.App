@@ -37,6 +37,8 @@ public sealed partial class ControlPage : Page
 
     private void Grid_Loaded(object sender, RoutedEventArgs e)
     {
+        VM.PropertyChanged += OnPropertyChanged;
+
         ControlWindow controlWindow = ((App)App.Current).Host.Services.GetRequiredService<ControlWindow>();
         controlWindow.SetFocus();
 
@@ -45,6 +47,15 @@ public sealed partial class ControlPage : Page
             if (args.WindowActivationState == WindowActivationState.Deactivated)
                 controlWindow.Hide();
         };
+    }
+
+    private void OnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == "Device")
+        {
+            ControlPopup.IsOpen = VM.Device?.EnableControl ?? false;
+            VolumePopup.IsOpen = VM.Device?.EnableControl ?? false;
+        }
     }
 }
 
@@ -56,10 +67,7 @@ public partial class ControlPageVM : ObservableObject
     public ObservableCollection<Device> Devices { get; init; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowControlBorder))]
     public partial Device? Device { get; set; }
-
-    public bool ShowControlBorder => Device != null;
 
     public bool ShowNoDevice => Devices.Count == 0;
 

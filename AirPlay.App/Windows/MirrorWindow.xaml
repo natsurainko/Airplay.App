@@ -22,8 +22,8 @@
 
         <Border
             x:Name="Border"
-            Height="48"
-            VerticalAlignment="Top"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
             SizeChanged="Border_SizeChanged" />
 
         <Viewbox x:Name="Viewbox" Stretch="Uniform">
@@ -42,6 +42,11 @@
             ShouldConstrainToRootBounds="False"
             Translation="0,0,32"
             VerticalOffset="-8">
+            <Popup.Transitions>
+                <TransitionCollection>
+                    <PopupThemeTransition />
+                </TransitionCollection>
+            </Popup.Transitions>
             <Popup.SystemBackdrop>
                 <DesktopAcrylicBackdrop />
             </Popup.SystemBackdrop>
@@ -98,10 +103,10 @@
                                     <Setter Property="FontSize" Value="10" />
                                 </Style>
                             </StackPanel.Resources>
-                            <Button Click="MinimizeButton_Click">
+                            <Button Click="MinimizeButton_Click" ToolTipService.ToolTip="Minimize">
                                 <FontIcon Glyph="&#xE921;" />
                             </Button>
-                            <Button Click="CloseButton_Click">
+                            <Button Click="CloseButton_Click" ToolTipService.ToolTip="Disconnect">
                                 <FontIcon Glyph="&#xE8BB;" />
                             </Button>
                         </StackPanel>
@@ -109,5 +114,17 @@
                 </Grid>
             </Border>
         </Popup>
+
+        <ContentDialog
+            x:Name="ConfirmDialog"
+            Title="Disconnect"
+            CloseButtonText="Cancel"
+            DefaultButton="Primary"
+            PrimaryButtonClick="ConfirmDialog_PrimaryButtonClick"
+            PrimaryButtonStyle="{ThemeResource AccentButtonStyle}"
+            PrimaryButtonText="Disconnect"
+            Style="{ThemeResource DefaultContentDialogStyle}">
+            <TextBlock Text="Closing this window will disconnect you from the device, interrupting screen mirroring and audio streaming." TextWrapping="WrapWholeWords" />
+        </ContentDialog>
     </Grid>
 </winuiex:WindowEx>

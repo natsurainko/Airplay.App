@@ -8,6 +8,8 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using Windows.Media;
 
 namespace AirPlay.App.Models;
@@ -71,6 +73,7 @@ public partial class Device : ObservableObject
     {
         Session = deviceSession;
         EnableControl = deviceSession.DacpServiceEndPoint != null;
+        PlayingItemName = deviceSession.IsMirrorSession ? "Mirroring" : "Audio";
         Volume = deviceSession.Volume;
 
         deviceSession.AudioControllerCreated += OnAudioControllerCreated;
@@ -103,29 +106,64 @@ public partial class Device : ObservableObject
 
     private void OnAudioControllerCreated(object? sender, EventArgs e)
     {
-        Session.AudioController?.AudioDataReceived += OnAudioDataReceived;
+        DateTime? lastReceiveData = null;
+
+        Session.AudioController?.AudioDataReceived += (sender, e) =>
+        {
+            lastReceiveData = DateTime.Now;
+            bool value = e.Data.Any(b => b != 0);
+
+            PlaybackStatus = e.Data.Any(b => b != 0)
+                ? MediaPlaybackStatus.Playing
+                : MediaPlaybackStatus.Paused;
+
+            if (ShowVolumeIcon != value)
+            {
+                App.DispatcherQueue.TryEnqueue(() =>
+                {
+                    ShowVolumeIcon = value;
+                    PlayPauseTag = value ? "Pause" : "Play";
+                    PlayPauseIcon = value ? "\uf8ae" : "\uf5b0";
+                });
+            }
+        };
+
+        if (Session.IsMirrorSession)
+        {
+            TimeSpan timeSpan = TimeSpan.FromSeconds(0.5);
+            CancellationTokenSource cancellationTokenSource = new();
+
+            void OnAudioControllerClosed(object? sender, EventArgs e)
+            {
+                cancellationTokenSource.Cancel();
+                Session.AudioControllerClosed -= OnAudioControllerClosed;
+            }
+
+            Session.AudioControllerClosed += OnAudioControllerClosed;
+
+            Task.Run(async () =>
+            {
+                while (!cancellationTokenSource.IsCancellationRequested && Session.AudioController != null)
+                {
+                    await Task.Delay(timeSpan, cancellationTokenSource.Token);
+
+                    if (lastReceiveData != null && DateTime.Now - lastReceiveData > timeSpan && ShowVolumeIcon != false)
+                    {
+                        PlaybackStatus = MediaPlaybackStatus.Paused;
+
+                        App.DispatcherQueue.TryEnqueue(() =>
+                        {
+                            ShowVolumeIcon = false;
+                            PlayPauseTag = "Play";
+                            PlayPauseIcon = "\uf5b0";
+                        });
+                    }
+                }
+            }, cancellationTokenSource.Token);
+        }
     }
 
     private void OnRemoteSetVolumeRequest(object? sender, double e) => App.DispatcherQueue.TryEnqueue(() => Volume = e);
-
-    private void OnAudioDataReceived(object? sender, PcmAudioData e)
-    {
-        bool value = e.Data.Any(b => b != 0);
-
-        PlaybackStatus = e.Data.Any(b => b != 0)
-            ? MediaPlaybackStatus.Playing
-            : MediaPlaybackStatus.Paused;
-
-        if (ShowVolumeIcon != value)
-        {
-            App.DispatcherQueue.TryEnqueue(() =>
-            {
-                ShowVolumeIcon = value;
-                PlayPauseTag = value ? "Pause" : "Play";
-                PlayPauseIcon = value ? "\uf8ae" : "\uf5b0";
-            });
-        }
-    }
 
     private void OnMediaProgressInfoReceived(object? sender, MediaProgressInfo e) => App.DispatcherQueue.TryEnqueue(() => ProgressInfo = e);
 

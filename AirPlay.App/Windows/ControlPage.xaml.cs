@@ -5,6 +5,7 @@ using AirPlay.Core2.Models;
 using AirPlay.Core2.Models.Messages;
 using AirPlay.Core2.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
+using H.NotifyIcon;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -25,6 +26,13 @@ public sealed partial class ControlPage : Page
     {
         this.DataContext = ((App)App.Current).Host.Services.GetService<ControlPageVM>()!;
         InitializeComponent();
+
+        this.ActualThemeChanged += OnActualThemeChanged;
+    }
+
+    private void OnActualThemeChanged(FrameworkElement sender, object args)
+    {
+        App.TaskbarIcon!.IconSource = App.GetIconTheme(this.ActualTheme == ElementTheme.Dark);
     }
 
     private void ControlButton_Click(object sender, RoutedEventArgs e)
@@ -89,8 +97,16 @@ public partial class ControlPageVM : ObservableObject
     {
         App.DispatcherQueue.TryEnqueue(() =>
         {
-            Devices.Add(new(e));
+            ControlWindow controlWindow = ((App)App.Current).Host.Services.GetRequiredService<ControlWindow>();
+            controlWindow.Activate();
+            controlWindow.SetForegroundWindow();
+            controlWindow.SetFocus();
+
+            Device device = new(e);
+            Devices.Add(device);
             OnPropertyChanged(nameof(ShowNoDevice));
+
+            if (Devices.Count == 0) Device = device;
         });
     }
 

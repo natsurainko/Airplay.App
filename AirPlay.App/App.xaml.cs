@@ -12,13 +12,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
-using Microsoft.Win32;
 using Serilog;
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using Windows.ApplicationModel;
-using Windows.UI.ViewManagement;
 using WinUIEx;
 
 namespace AirPlay.App;
@@ -30,7 +28,7 @@ public partial class App : Application
 {
     public IHost Host { get; set; }
 
-    private TaskbarIcon? TaskbarIcon { get; set; }
+    public static TaskbarIcon? TaskbarIcon { get; set; }
 
     public static DispatcherQueue DispatcherQueue { get; private set; } = null!;
 
@@ -50,7 +48,7 @@ public partial class App : Application
             {
                 services.UseAirPlayService();
 
-                services.Configure<AirPlayConfig>(c => c.ServiceName = "AirPlay App");
+                services.Configure<AirPlayConfig>(c => c.ServiceName = "AirPlay Windows App");
 
                 services.AddSingleton<SmtcControlService>();
                 services.AddHostedService(p => p.GetRequiredService<SmtcControlService>());
@@ -121,9 +119,6 @@ public partial class App : Application
         };
         TaskbarIcon.ForceCreate(false);
 
-        UISettings uISettings = new();
-        uISettings.ColorValuesChanged += UISettings_ColorValuesChanged;
-
         Host.Services.GetRequiredService<ControlWindow>().Activate();
     }
 
@@ -135,23 +130,9 @@ public partial class App : Application
         controlWindow.SetFocus();
     });
 
-    private void UISettings_ColorValuesChanged(UISettings sender, object args)
-    {
-        RegistryKey root = Registry.CurrentUser;
-        RegistryKey rk = root.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")!;
-
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            TaskbarIcon!.IconSource = GetIconTheme(isLightTheme: Convert.ToInt32(rk.GetValue("AppsUseLightTheme", null)) == 0);
-        });
-    }
-
-    private static BitmapImage GetIconTheme(bool isLightTheme = false)
-    {
-        return new BitmapImage(new Uri
-            ($"ms-appx:///Assets/Icons/airplay_x16{(isLightTheme ? "_light" : string.Empty)}.ico",
+    public static BitmapImage GetIconTheme(bool isLightTheme = false) 
+        => new(new Uri($"ms-appx:///Assets/Icons/airplay_x16{(isLightTheme ? "_light" : string.Empty)}.ico",
             uriKind: UriKind.RelativeOrAbsolute));
-    }
 
     [DllImport("UXTheme.dll", SetLastError = true, EntryPoint = "#138")]
     public static extern bool ShouldSystemUseDarkMode();

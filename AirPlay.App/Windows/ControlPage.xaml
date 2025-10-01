@@ -136,6 +136,14 @@
                         </Border>
                     </Border>
 
+                    <FontIcon
+                        x:Name="MirrorIcon"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        x:Load="{x:Bind VM.Device.Session.IsMirrorSession, Mode=OneWay}"
+                        FontSize="24"
+                        Glyph="&#xE7C4;" />
+
                     <StackPanel
                         Grid.Column="1"
                         Margin="8,0"

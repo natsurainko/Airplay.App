@@ -8,6 +8,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Drawing;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Timers;
 using WinUIEx;
 
@@ -29,7 +30,6 @@ public sealed partial class MirrorWindow : WindowEx
         Session = session;
         _frameSize = size;
 
-        //this.IsMinimizable = false;
         this.IsMaximizable = false;
 
         this.IsTitleBarVisible = false;
@@ -118,12 +118,6 @@ public sealed partial class MirrorWindow : WindowEx
         }
     }
 
-    private void Grid_Unloaded(object sender, RoutedEventArgs e)
-    {
-        this.Canvas.RemoveFromVisualTree();
-        this.Canvas = null;
-    }
-
     public string DeviceIcon
     {
         get
@@ -138,10 +132,31 @@ public sealed partial class MirrorWindow : WindowEx
 
     public DeviceSession Session { get; private set; }
 
-    private void Grid_Loaded(object sender, RoutedEventArgs e)
-    {
-        Popup.IsOpen = true;
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e) => this.Minimize();
 
+    private async void CloseButton_Click(object sender, RoutedEventArgs e) => await ConfirmDialog.ShowAsync();
+
+    private void ConfirmDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args) => Session.Disconnect();
+
+    private async void Border_Loaded(object sender, RoutedEventArgs e)
+    {
+        this.AppWindow.TitleBar.SetDragRectangles(
+        [
+            new()
+            {
+                X = 0,
+                Y = 0,
+                Width = (int)(Border.ActualWidth * Border.XamlRoot.RasterizationScale),
+                Height = (int)(48 * Border.XamlRoot.RasterizationScale)
+            }
+        ]);
+
+        await Task.Delay(500);
+        Popup.IsOpen = true;
+    }
+
+    private void Border_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
         this.AppWindow.TitleBar.SetDragRectangles(
         [
             new()
@@ -154,23 +169,9 @@ public sealed partial class MirrorWindow : WindowEx
         ]);
     }
 
-    private void Border_SizeChanged(object sender, SizeChangedEventArgs e)
+    private void Grid_Unloaded(object sender, RoutedEventArgs e)
     {
-        this.AppWindow.TitleBar.SetDragRectangles(
-        [ 
-            new()
-            {
-                X = 0,
-                Y = 0,
-                Width = (int)(Border.ActualWidth * Border.XamlRoot.RasterizationScale),
-                Height = (int)(48 * Border.XamlRoot.RasterizationScale)
-            }
-        ]);
+        this.Canvas.RemoveFromVisualTree();
+        this.Canvas = null;
     }
-
-    private void MinimizeButton_Click(object sender, RoutedEventArgs e) => this.Minimize();
-
-    private async void CloseButton_Click(object sender, RoutedEventArgs e) => await ConfirmDialog.ShowAsync();
-
-    private void ConfirmDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args) => Session.Disconnect();
 }

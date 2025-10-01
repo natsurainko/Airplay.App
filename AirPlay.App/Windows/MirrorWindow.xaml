@@ -15,7 +15,7 @@
         <MicaBackdrop />
     </winuiex:WindowEx.SystemBackdrop>
 
-    <Grid Loaded="Grid_Loaded" Unloaded="Grid_Unloaded">
+    <Grid Unloaded="Grid_Unloaded">
         <Grid.Resources>
             <ThemeShadow x:Key="SharedShadow" />
         </Grid.Resources>
@@ -24,13 +24,11 @@
             x:Name="Border"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
+            Loaded="Border_Loaded"
             SizeChanged="Border_SizeChanged" />
 
-        <Viewbox x:Name="Viewbox" Stretch="Uniform">
-            <win2d:CanvasControl
-                x:Name="Canvas"
-                HorizontalAlignment="Center"
-                Draw="Canvas_Draw" />
+        <Viewbox Stretch="Uniform">
+            <win2d:CanvasControl x:Name="Canvas" Draw="Canvas_Draw" />
         </Viewbox>
 
         <Popup

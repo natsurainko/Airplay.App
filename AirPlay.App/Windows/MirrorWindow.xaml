@@ -28,7 +28,11 @@
             SizeChanged="Border_SizeChanged" />
 
         <Viewbox Stretch="Uniform">
-            <win2d:CanvasControl x:Name="Canvas" Draw="Canvas_Draw" />
+            <win2d:CanvasAnimatedControl
+                x:Name="Canvas"
+                CreateResources="Canvas_CreateResources"
+                Draw="Canvas_Draw"
+                Paused="True" />
         </Viewbox>
 
         <Popup

@@ -1,2 +1,5 @@
 SetFocus
 RegisterHotKey
+GetDC
+GetDeviceCaps
+ReleaseDC

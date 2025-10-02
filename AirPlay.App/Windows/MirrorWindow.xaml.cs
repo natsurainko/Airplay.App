@@ -1,5 +1,7 @@
+using AirPlay.App.Extensions;
 using AirPlay.Core2.Models;
 using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.UI;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -20,13 +22,17 @@ namespace AirPlay.App.Windows;
 public sealed partial class MirrorWindow : WindowEx
 {
     private readonly Timer _timer = new(TimeSpan.FromSeconds(1));
-    private readonly CanvasDevice _device = CanvasDevice.GetSharedDevice();
     private readonly Lock _bitmapLock = new();
 
-    private int _frameCountPerMin = 0;
-    private CanvasBitmap? _currentBitmap;
-    private CanvasBitmap? _nextBitmap;
     private Size _frameSize;
+    private int _decodedFrames = 0;
+    private int _droppedFrames = 0;
+
+    private CanvasDevice? _canvasDevice;
+    private CanvasBitmap? _currentBitmap;
+
+    private bool _isRendering = false;
+    private bool _isDisposed = false;
 
     public MirrorWindow(DeviceSession session, Size size)
     {
@@ -44,6 +50,7 @@ public sealed partial class MirrorWindow : WindowEx
         Height = size.Height / ControlWindow.ControlWindowXamlRoot.RasterizationScale / 1.5;
 
         (Canvas.Width, Canvas.Height) = (size.Width, size.Height);
+        Canvas.TargetElapsedTime = TimeSpan.FromSeconds(1 / (double)this.GetRefreshRate());
 
         Closed += OnWindowClosed;
 
@@ -59,72 +66,110 @@ public sealed partial class MirrorWindow : WindowEx
 
     public void OnFrameDataReceived(byte[] frameData)
     {
-        try
-        {
-            if (this.WindowState == WindowState.Minimized) return;
+        Interlocked.Increment(ref _decodedFrames);
 
-            lock (_bitmapLock)
-            {
-                if (_nextBitmap == null ||
-                    _nextBitmap.Size.Width != _frameSize.Width ||
-                    _nextBitmap.Size.Height != _frameSize.Height)
-                {
-                    _nextBitmap?.Dispose();
-                    _nextBitmap = CanvasBitmap.CreateFromBytes(
-                        _device,
-                        frameData,
-                        _frameSize.Width,
-                        _frameSize.Height,
-                        DirectXPixelFormat.B8G8R8A8UIntNormalized
-                    );
-                }
-                else _nextBitmap.SetPixelBytes(frameData);
-            }
-
-            Canvas.Invalidate();
-        }
-        catch (Exception ex)
+        if (_isDisposed || _canvasDevice == null)
         {
-            Debug.WriteLine($"OnFrameDataReceived error: {ex.Message}");
-        }
-        finally
-        {
-            Interlocked.Increment(ref _frameCountPerMin);
             ArrayPool<byte>.Shared.Return(frameData);
+            return;
         }
+        if (this.WindowState == WindowState.Minimized)
+        {
+            Canvas.Paused = true;
+            ArrayPool<byte>.Shared.Return(frameData);
+            return;
+        }
+        if (_isRendering)
+        {
+            Interlocked.Increment(ref _droppedFrames);
+            ArrayPool<byte>.Shared.Return(frameData);
+            return;
+        }
+
+        _isRendering = true;
+
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                if (_isDisposed || _canvasDevice == null) return;
+
+                lock (_bitmapLock)
+                {
+                    if (_currentBitmap == null ||
+                        _currentBitmap.Size.Width != _frameSize.Width ||
+                        _currentBitmap.Size.Height != _frameSize.Height)
+                    {
+                        _currentBitmap?.Dispose();
+                        _currentBitmap = CanvasBitmap.CreateFromBytes(
+                            _canvasDevice,
+                            frameData,
+                            _frameSize.Width,
+                            _frameSize.Height,
+                            DirectXPixelFormat.B8G8R8A8UIntNormalized
+                        );
+                    }
+                    else _currentBitmap.SetPixelBytes(frameData);
+                }
+
+                if (Canvas.Paused) Canvas.Paused = false;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"OnFrameDataReceived error: {ex.Message}");
+            }
+            finally
+            {
+                _isRendering = false;
+                ArrayPool<byte>.Shared.Return(frameData);
+            }
+        });
     }
 
     private void OnElapsed(object? sender, ElapsedEventArgs e)
     {
-        Debug.WriteLine($"FPS: {_frameCountPerMin} ");
-        Interlocked.Exchange(ref _frameCountPerMin, 0);
+        var dropped = Interlocked.Exchange(ref _droppedFrames, 0);
+        var fps = Interlocked.Exchange(ref _decodedFrames, 0);
+
+        if (dropped > 0)
+            Debug.WriteLine($"FPS: {fps} (Dropped: {dropped})");
+        else
+            Debug.WriteLine($"FPS: {fps}");
     }
 
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
-        _currentBitmap?.Dispose();
-        _nextBitmap?.Dispose();
+        lock (_bitmapLock)
+        {
+            _currentBitmap?.Dispose();
+            _currentBitmap = null;
+        }
 
         _timer.Stop();
         _timer.Dispose();
 
+        Canvas?.Paused = true;
+        _canvasDevice = null;
+
+        _isDisposed = true;
         GC.Collect();
     }
 
-    private void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
+    private void Canvas_Draw(ICanvasAnimatedControl sender, CanvasAnimatedDrawEventArgs args)
     {
+        if (_isDisposed) return;
+
         lock (_bitmapLock)
         {
-            if (_nextBitmap != null)
-            {
-                (_currentBitmap, _nextBitmap) = (_nextBitmap, _currentBitmap);
+            if (_currentBitmap != null)
                 args.DrawingSession.DrawImage(_currentBitmap);
-            }
-            else if (_currentBitmap != null)
-            {
-                args.DrawingSession.DrawImage(_currentBitmap);
-            }
         }
+    }
+
+    private void Canvas_CreateResources(CanvasAnimatedControl sender, CanvasCreateResourcesEventArgs args)
+    {
+        _canvasDevice = sender.Device;
+        Debug.WriteLine($"Canvas device created: {_canvasDevice != null}");
     }
 
     public string DeviceIcon

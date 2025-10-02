@@ -106,7 +106,7 @@ public partial class ControlPageVM : ObservableObject
             Devices.Add(device);
             OnPropertyChanged(nameof(ShowNoDevice));
 
-            if (Devices.Count == 0) Device = device;
+            Device ??= device;
         });
     }
 

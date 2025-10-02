@@ -10,6 +10,7 @@ using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
+using Windows.Graphics.DirectX;
 using WinUIEx;
 
 using Timer = System.Timers.Timer;
@@ -20,9 +21,11 @@ public sealed partial class MirrorWindow : WindowEx
 {
     private readonly Timer _timer = new(TimeSpan.FromSeconds(1));
     private readonly CanvasDevice _device = CanvasDevice.GetSharedDevice();
+    private readonly Lock _bitmapLock = new();
 
     private int _frameCountPerMin = 0;
-    private CanvasBitmap? _frameBitmap;
+    private CanvasBitmap? _currentBitmap;
+    private CanvasBitmap? _nextBitmap;
     private Size _frameSize;
 
     public MirrorWindow(DeviceSession session, Size size)
@@ -59,26 +62,30 @@ public sealed partial class MirrorWindow : WindowEx
         try
         {
             if (this.WindowState == WindowState.Minimized) return;
-            if (_frameBitmap != null)
-            {
-                Canvas.Invalidate();
-                return;
-            }
 
-            _frameBitmap = CanvasBitmap.CreateFromBytes
-            (
-                _device,
-                frameData,
-                _frameSize.Width,
-                _frameSize.Height,
-                global::Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized
-            );
+            lock (_bitmapLock)
+            {
+                if (_nextBitmap == null ||
+                    _nextBitmap.Size.Width != _frameSize.Width ||
+                    _nextBitmap.Size.Height != _frameSize.Height)
+                {
+                    _nextBitmap?.Dispose();
+                    _nextBitmap = CanvasBitmap.CreateFromBytes(
+                        _device,
+                        frameData,
+                        _frameSize.Width,
+                        _frameSize.Height,
+                        DirectXPixelFormat.B8G8R8A8UIntNormalized
+                    );
+                }
+                else _nextBitmap.SetPixelBytes(frameData);
+            }
 
             Canvas.Invalidate();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-
+            Debug.WriteLine($"OnFrameDataReceived error: {ex.Message}");
         }
         finally
         {
@@ -95,26 +102,28 @@ public sealed partial class MirrorWindow : WindowEx
 
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
-        _frameBitmap?.Dispose();
+        _currentBitmap?.Dispose();
+        _nextBitmap?.Dispose();
 
         _timer.Stop();
         _timer.Dispose();
+
+        GC.Collect();
     }
 
     private void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
-        if (_frameBitmap == null) return;
-
-        try
+        lock (_bitmapLock)
         {
-            lock (_frameBitmap)
-                args.DrawingSession.DrawImage(_frameBitmap);
-        }
-        catch (ObjectDisposedException) { }
-        finally
-        {
-            _frameBitmap.Dispose();
-            _frameBitmap = null;
+            if (_nextBitmap != null)
+            {
+                (_currentBitmap, _nextBitmap) = (_nextBitmap, _currentBitmap);
+                args.DrawingSession.DrawImage(_currentBitmap);
+            }
+            else if (_currentBitmap != null)
+            {
+                args.DrawingSession.DrawImage(_currentBitmap);
+            }
         }
     }
 

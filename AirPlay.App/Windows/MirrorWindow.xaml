@@ -8,7 +8,6 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:win2d="using:Microsoft.Graphics.Canvas.UI.Xaml"
     xmlns:winuiex="using:WinUIEx"
-    Title="MirrorWindow"
     mc:Ignorable="d">
 
     <winuiex:WindowEx.SystemBackdrop>

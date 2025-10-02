@@ -40,9 +40,9 @@ public sealed partial class MirrorWindow : WindowEx
         _frameSize = size;
 
         this.IsMaximizable = false;
-
         this.IsTitleBarVisible = false;
         this.ExtendsContentIntoTitleBar = true;
+        this.Title = session.DeviceDisplayName;
 
         InitializeComponent();
 

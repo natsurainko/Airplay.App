@@ -21,21 +21,6 @@
     <None Remove="Assets\airplay.ico" />
     <None Remove="Assets\airplay.png" />
     <None Remove="Assets\Icons\airplay_x16_light.ico" />
-    <None Remove="Libraries\avcodec-61.dll" />
-    <None Remove="Libraries\avcodec-62.dll" />
-    <None Remove="Libraries\avdevice-61.dll" />
-    <None Remove="Libraries\avdevice-62.dll" />
-    <None Remove="Libraries\avfilter-10.dll" />
-    <None Remove="Libraries\avfilter-11.dll" />
-    <None Remove="Libraries\avformat-61.dll" />
-    <None Remove="Libraries\avformat-62.dll" />
-    <None Remove="Libraries\avutil-59.dll" />
-    <None Remove="Libraries\avutil-60.dll" />
-    <None Remove="Libraries\postproc-58.dll" />
-    <None Remove="Libraries\swresample-5.dll" />
-    <None Remove="Libraries\swresample-6.dll" />
-    <None Remove="Libraries\swscale-8.dll" />
-    <None Remove="Libraries\swscale-9.dll" />
     <None Remove="Windows\ControlPage.xaml" />
     <None Remove="Windows\ControlWindow.xaml" />
     <None Remove="Windows\MirrorWindow.xaml" />
@@ -48,14 +33,13 @@
     <Content Include="Assets\Square44x44Logo.scale-200.png" />
     <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
-    <Content Include="Libraries\avcodec-61.dll" />
-    <Content Include="Libraries\avdevice-61.dll" />
-    <Content Include="Libraries\avfilter-10.dll" />
-    <Content Include="Libraries\avformat-61.dll" />
-    <Content Include="Libraries\avutil-59.dll" />
-    <Content Include="Libraries\postproc-58.dll" />
-    <Content Include="Libraries\swresample-5.dll" />
-    <Content Include="Libraries\swscale-8.dll" />
+    <Content Include="Libraries\avcodec-63.dll" />
+    <Content Include="Libraries\avdevice-63.dll" />
+    <Content Include="Libraries\avfilter-12.dll" />
+    <Content Include="Libraries\avformat-63.dll" />
+    <Content Include="Libraries\avutil-61.dll" />
+    <Content Include="Libraries\swresample-7.dll" />
+    <Content Include="Libraries\swscale-10.dll" />
   </ItemGroup>
 
   <ItemGroup>

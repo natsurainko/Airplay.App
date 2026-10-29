@@ -3,3 +3,4 @@ RegisterHotKey
 GetDC
 GetDeviceCaps
 ReleaseDC
+MessageBox

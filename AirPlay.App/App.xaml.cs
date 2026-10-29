@@ -17,6 +17,8 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using Windows.ApplicationModel;
+using Windows.Win32;
+using Windows.Win32.UI.WindowsAndMessaging;
 using WinUIEx;
 
 namespace AirPlay.App;
@@ -38,7 +40,9 @@ public partial class App : Application
     /// </summary>
     public App()
     {
-        this.UnhandledException += (_, e) => System.Windows.Forms.MessageBox.Show(e.Message + e.Exception.ToString());
+        this.UnhandledException += (_, e) => PInvoke.MessageBox(
+            default, e.Exception?.ToString() ?? e.Message, "AirPlay — 未处理的异常",
+            MESSAGEBOX_STYLE.MB_OK | MESSAGEBOX_STYLE.MB_ICONERROR);
 
         DynamicallyLoadedBindings.LibrariesPath = Path.Combine(Package.Current.InstalledPath, "Libraries");
         DynamicallyLoadedBindings.Initialize();

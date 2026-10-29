@@ -73,7 +73,7 @@ public unsafe partial class H264Decoder : IDisposable
                         SwsContext* swsCtx = ffmpeg.sws_getContext(
                             width, height, (AVPixelFormat)_frame->format,
                             width, height, AVPixelFormat.AV_PIX_FMT_BGRA,
-                            ffmpeg.SWS_FAST_BILINEAR, null, null, null);
+                            (int)SwsFlags.SWS_FAST_BILINEAR, null, null, null);
 
                         ffmpeg.sws_scale(
                             swsCtx,

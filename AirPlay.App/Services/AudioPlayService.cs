@@ -3,6 +3,7 @@ using AirPlay.Core2.Services;
 using Microsoft.Extensions.Hosting;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
+using System;
 using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,7 +12,7 @@ namespace AirPlay.App.Services;
 
 class AudioPlayService : IHostedService
 {
-    private readonly WaveOutEvent _waveOut;
+    private readonly WaveOut _waveOut;
     private readonly MixingSampleProvider _mixingSampleProvider;
 
     private readonly ConcurrentDictionary<DeviceSession, (BufferedWaveProvider, ISampleProvider)> _sampleProviders = [];
@@ -20,7 +21,7 @@ class AudioPlayService : IHostedService
     {
         WaveFormat waveFormat = new (44100, 16, 2);
 
-        _waveOut = new WaveOutEvent();
+        _waveOut = new WaveOut();
         _mixingSampleProvider = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(44100, 2)) 
         {
             ReadFully = true
@@ -30,9 +31,8 @@ class AudioPlayService : IHostedService
         {
             session.AudioControllerCreated += (_, _) =>
             {
-                BufferedWaveProvider bufferedWaveProvider = new(waveFormat)
+                BufferedWaveProvider bufferedWaveProvider = new(waveFormat, TimeSpan.FromSeconds(10))
                 {
-                    BufferLength = 10 * waveFormat.AverageBytesPerSecond,
                     DiscardOnBufferOverflow = true
                 };
 
@@ -42,7 +42,7 @@ class AudioPlayService : IHostedService
 
                 session.AudioController!.AudioDataReceived += (sender, e) =>
                 {
-                    volumeSampleProvider.Volume = (float)(session.Volume / 100);
+                    volumeSampleProvider.Volume = (float)(session.Volume / 100.0);
                     bufferedWaveProvider?.AddSamples(e.Data, 0, e.Data.Length);
                 };
 

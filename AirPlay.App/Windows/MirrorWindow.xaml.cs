@@ -24,7 +24,6 @@ public sealed partial class MirrorWindow : WindowEx
     private readonly Timer _timer = new(TimeSpan.FromSeconds(1));
     private readonly Lock _bitmapLock = new();
 
-    private Size _frameSize;
     private int _decodedFrames = 0;
     private int _droppedFrames = 0;
 
@@ -37,7 +36,6 @@ public sealed partial class MirrorWindow : WindowEx
     public MirrorWindow(DeviceSession session, Size size)
     {
         Session = session;
-        _frameSize = size;
 
         this.IsMaximizable = false;
         this.IsTitleBarVisible = false;
@@ -61,10 +59,9 @@ public sealed partial class MirrorWindow : WindowEx
     public void OnFrameSizeChanged(Size size)
     {
         (Canvas.Width, Canvas.Height) = (size.Width, size.Height);
-        _frameSize = size;
     }
 
-    public void OnFrameDataReceived(byte[] frameData)
+    public void OnFrameDataReceived(byte[] frameData, int width, int height)
     {
         Interlocked.Increment(ref _decodedFrames);
 
@@ -88,7 +85,7 @@ public sealed partial class MirrorWindow : WindowEx
 
         _isRendering = true;
 
-        DispatcherQueue.TryEnqueue(() =>
+        if (!DispatcherQueue.TryEnqueue(() =>
         {
             try
             {
@@ -97,15 +94,17 @@ public sealed partial class MirrorWindow : WindowEx
                 lock (_bitmapLock)
                 {
                     if (_currentBitmap == null ||
-                        _currentBitmap.Size.Width != _frameSize.Width ||
-                        _currentBitmap.Size.Height != _frameSize.Height)
+                        _currentBitmap.SizeInPixels.Width != width ||
+                        _currentBitmap.SizeInPixels.Height != height)
                     {
+                        OnFrameSizeChanged(new Size(width, height));
+
                         _currentBitmap?.Dispose();
                         _currentBitmap = CanvasBitmap.CreateFromBytes(
                             _canvasDevice,
                             frameData,
-                            _frameSize.Width,
-                            _frameSize.Height,
+                            width,
+                            height,
                             DirectXPixelFormat.B8G8R8A8UIntNormalized
                         );
                     }
@@ -123,7 +122,11 @@ public sealed partial class MirrorWindow : WindowEx
                 _isRendering = false;
                 ArrayPool<byte>.Shared.Return(frameData);
             }
-        });
+        }))
+        {
+            _isRendering = false;
+            ArrayPool<byte>.Shared.Return(frameData);
+        }
     }
 
     private void OnElapsed(object? sender, ElapsedEventArgs e)
@@ -152,7 +155,6 @@ public sealed partial class MirrorWindow : WindowEx
         _canvasDevice = null;
 
         _isDisposed = true;
-        GC.Collect();
     }
 
     private void Canvas_Draw(ICanvasAnimatedControl sender, CanvasAnimatedDrawEventArgs args)
@@ -169,7 +171,6 @@ public sealed partial class MirrorWindow : WindowEx
     private void Canvas_CreateResources(CanvasAnimatedControl sender, CanvasCreateResourcesEventArgs args)
     {
         _canvasDevice = sender.Device;
-        Debug.WriteLine($"Canvas device created: {_canvasDevice != null}");
     }
 
     public string DeviceIcon

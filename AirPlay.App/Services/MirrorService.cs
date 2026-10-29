@@ -3,6 +3,7 @@ using AirPlay.App.Windows;
 using AirPlay.Core2.Models;
 using AirPlay.Core2.Services;
 using Microsoft.Extensions.Hosting;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading;
@@ -28,14 +29,18 @@ internal class MirrorService(SessionManager sessionManager) : IHostedService
                 session.MirrorController!.H264DataReceived += (_, e) =>
                 {
                     if (decoder.Decode(e.Data, out var rgbData, out var width, out var height))
-                        mirrorWindow?.OnFrameDataReceived(rgbData);
-                    else Debug.WriteLine($"Decode Failed");
+                    {
+                        var window = mirrorWindow;
+                        if (window != null)
+                            window.OnFrameDataReceived(rgbData, width, height);
+                        else
+                            ArrayPool<byte>.Shared.Return(rgbData);
+                    }
+                    else Debug.WriteLine("Decode Failed");
                 };
 
                 session.MirrorController!.FrameSizeChanged += (_, e) =>
                 {
-                    Debug.WriteLine(e);
-
                     if (_mirroringWindows.TryGetValue(session, out mirrorWindow))
                     {
                         App.DispatcherQueue.TryEnqueue(() => mirrorWindow.OnFrameSizeChanged(e));

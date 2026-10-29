@@ -55,36 +55,58 @@ public unsafe partial class H264Decoder : IDisposable
                 width = _frame->width;
                 height = _frame->height;
 
-                int rgbStride = width * 4;
-                rgbData = ArrayPool<byte>.Shared.Rent(rgbStride * height);
+                int rgbStride = checked(width * 4);
+                int rgbLength = checked(rgbStride * height);
 
                 AVFrame* rgbFrame = ffmpeg.av_frame_alloc();
+                if (rgbFrame == null) return false;
+
+                SwsContext* swsCtx = null;
+                byte[]? outputBuffer = null;
+
                 try
                 {
                     rgbFrame->format = (int)AVPixelFormat.AV_PIX_FMT_BGRA;
                     rgbFrame->width = width;
                     rgbFrame->height = height;
 
-                    fixed (byte* prgb = rgbData)
+                    // Let FFmpeg provide aligned storage and its actual row stride.
+                    if (ffmpeg.av_frame_get_buffer(rgbFrame, 32) < 0)
+                        return false;
+
+                    swsCtx = ffmpeg.sws_getContext(
+                        width, height, (AVPixelFormat)_frame->format,
+                        width, height, AVPixelFormat.AV_PIX_FMT_BGRA,
+                        (int)SwsFlags.SWS_BILINEAR, null, null, null);
+                    if (swsCtx == null) return false;
+
+                    int convertedRows = ffmpeg.sws_scale(
+                        swsCtx,
+                        _frame->data, _frame->linesize, 0, height,
+                        rgbFrame->data, rgbFrame->linesize);
+
+                    if (convertedRows != height || rgbFrame->linesize[0] < rgbStride)
+                        return false;
+
+                    // Win2D receives tightly packed BGRA pixels, without FFmpeg's row padding.
+                    outputBuffer = ArrayPool<byte>.Shared.Rent(rgbLength);
+                    for (int y = 0; y < height; y++)
                     {
-                        rgbFrame->data[0] = prgb;
-                        rgbFrame->linesize[0] = rgbStride;
-
-                        SwsContext* swsCtx = ffmpeg.sws_getContext(
-                            width, height, (AVPixelFormat)_frame->format,
-                            width, height, AVPixelFormat.AV_PIX_FMT_BGRA,
-                            (int)SwsFlags.SWS_FAST_BILINEAR, null, null, null);
-
-                        ffmpeg.sws_scale(
-                            swsCtx,
-                            _frame->data, _frame->linesize, 0, height,
-                            rgbFrame->data, rgbFrame->linesize);
-
-                        ffmpeg.sws_freeContext(swsCtx);
+                        new ReadOnlySpan<byte>(
+                            rgbFrame->data[0] + y * rgbFrame->linesize[0], rgbStride)
+                            .CopyTo(outputBuffer.AsSpan(y * rgbStride, rgbStride));
                     }
+
+                    rgbData = outputBuffer;
                 }
                 finally
                 {
+                    if (outputBuffer != null && rgbData == null)
+                        ArrayPool<byte>.Shared.Return(outputBuffer);
+
+                    if (swsCtx != null)
+                        ffmpeg.sws_freeContext(swsCtx);
+
                     ffmpeg.av_frame_free(&rgbFrame);
                 }
 

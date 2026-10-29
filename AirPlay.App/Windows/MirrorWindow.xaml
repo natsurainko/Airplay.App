@@ -36,13 +36,10 @@
 
         <Popup
             x:Name="Popup"
-            DesiredPlacement="Top"
             LightDismissOverlayMode="Off"
-            PlacementTarget="{x:Bind Border}"
             Shadow="{ThemeResource SharedShadow}"
             ShouldConstrainToRootBounds="False"
-            Translation="0,0,32"
-            VerticalOffset="-8">
+            Translation="0,0,32">
             <Popup.Transitions>
                 <TransitionCollection>
                     <PopupThemeTransition />
@@ -54,6 +51,7 @@
             <Border
                 Padding="16,12"
                 BorderBrush="{ThemeResource ButtonBorderBrushPointerOver}"
+                SizeChanged="PopupContent_SizeChanged"
                 BorderThickness="1"
                 CornerRadius="8">
                 <Grid Padding="8,0">

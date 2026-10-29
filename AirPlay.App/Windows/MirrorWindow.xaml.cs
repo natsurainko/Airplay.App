@@ -10,7 +10,6 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Drawing;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Timers;
 using Windows.Graphics.DirectX;
 using WinUIEx;
@@ -151,6 +150,7 @@ public sealed partial class MirrorWindow : WindowEx
         _timer.Stop();
         _timer.Dispose();
 
+        Popup.IsOpen = false;
         Canvas?.Paused = true;
         _canvasDevice = null;
 
@@ -193,33 +193,58 @@ public sealed partial class MirrorWindow : WindowEx
 
     private void ConfirmDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args) => Session.Disconnect();
 
-    private async void Border_Loaded(object sender, RoutedEventArgs e)
+    private void Border_Loaded(object sender, RoutedEventArgs e)
     {
-        this.AppWindow.TitleBar.SetDragRectangles(
-        [
-            new()
-            {
-                X = 0,
-                Y = 0,
-                Width = (int)(Border.ActualWidth * Border.XamlRoot.RasterizationScale),
-                Height = (int)(48 * Border.XamlRoot.RasterizationScale)
-            }
-        ]);
+        if (_isDisposed) return;
 
-        await Task.Delay(500);
+        UpdateDragRectangles();
+        UpdatePopupPosition();
         Popup.IsOpen = true;
     }
 
     private void Border_SizeChanged(object sender, SizeChangedEventArgs e)
     {
+        if (_isDisposed || Border.XamlRoot == null) return;
+
+        UpdateDragRectangles();
+        UpdatePopupPosition();
+    }
+
+    private void PopupContent_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdatePopupPosition();
+    }
+
+    private void UpdatePopupPosition()
+    {
+        if (_isDisposed || Border.XamlRoot == null ||
+            Popup?.Child is not FrameworkElement popupContent)
+            return;
+
+        // Measure before opening; the popup child may not have an ActualSize yet.
+        popupContent.Measure(new global::Windows.Foundation.Size(
+            double.PositiveInfinity, double.PositiveInfinity));
+
+        var size = popupContent.DesiredSize;
+        var origin = Border.TransformToVisual(Content)
+            .TransformPoint(new global::Windows.Foundation.Point(0, 0));
+
+        // Explicit root-relative offsets avoid automatic Top/Bottom placement fallback.
+        Popup.HorizontalOffset = origin.X + (Border.ActualWidth - size.Width) / 2;
+        Popup.VerticalOffset = origin.Y - size.Height - 8;
+    }
+
+    private void UpdateDragRectangles()
+    {
+        double scale = Border.XamlRoot.RasterizationScale;
         this.AppWindow.TitleBar.SetDragRectangles(
         [
             new()
             {
                 X = 0,
                 Y = 0,
-                Width = (int)(Border.ActualWidth * Border.XamlRoot.RasterizationScale),
-                Height = (int)(48 * Border.XamlRoot.RasterizationScale)
+                Width = (int)(Border.ActualWidth * scale),
+                Height = (int)(48 * scale)
             }
         ]);
     }

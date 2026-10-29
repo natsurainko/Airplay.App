@@ -89,6 +89,7 @@
 
         <Popup
             x:Name="ControlPopup"
+            IsOpen="{x:Bind VM.CanControl, Mode=OneWay}"
             DesiredPlacement="Bottom"
             HorizontalOffset="-16"
             LightDismissOverlayMode="Off"
@@ -189,7 +190,7 @@
                         Padding="8"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        IsEnabled="{x:Bind VM.Device.EnableControl, Mode=OneWay}">
+                        IsEnabled="{x:Bind VM.CanControl, Mode=OneWay}">
                         <StackPanel Orientation="Horizontal" Spacing="4">
                             <StackPanel.Resources>
                                 <Style TargetType="Button">
@@ -219,6 +220,7 @@
 
         <Popup
             x:Name="VolumePopup"
+            IsOpen="{x:Bind VM.CanControl, Mode=OneWay}"
             DesiredPlacement="Bottom"
             HorizontalOffset="-16"
             LightDismissOverlayMode="Off"

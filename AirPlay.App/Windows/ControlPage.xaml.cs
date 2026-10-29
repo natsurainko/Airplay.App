@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using WinUIEx;
 
@@ -45,8 +46,6 @@ public sealed partial class ControlPage : Page
 
     private void Grid_Loaded(object sender, RoutedEventArgs e)
     {
-        VM.PropertyChanged += OnPropertyChanged;
-
         ControlWindow controlWindow = ((App)App.Current).Host.Services.GetRequiredService<ControlWindow>();
         controlWindow.SetFocus();
 
@@ -55,15 +54,6 @@ public sealed partial class ControlPage : Page
             if (args.WindowActivationState == WindowActivationState.Deactivated)
                 controlWindow.Hide();
         };
-    }
-
-    private void OnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == "Device")
-        {
-            ControlPopup.IsOpen = VM.Device?.EnableControl ?? false;
-            VolumePopup.IsOpen = VM.Device?.EnableControl ?? false;
-        }
     }
 }
 
@@ -79,6 +69,8 @@ public partial class ControlPageVM : ObservableObject
 
     public bool ShowNoDevice => Devices.Count == 0;
 
+    public bool CanControl => Device?.EnableControl ?? false;
+
     public ControlPageVM(SessionManager sessionManager, SmtcControlService smtcControlService)
     {
         _sessionManager = sessionManager;
@@ -88,9 +80,21 @@ public partial class ControlPageVM : ObservableObject
         _sessionManager.SessionClosed += OnSessionClosed;
     }
 
-    partial void OnDeviceChanged(Device? value)
+    partial void OnDeviceChanged(Device? oldValue, Device? newValue)
     {
-        _smtcControlService.SwitchDevice(value);
+        if (oldValue != null)
+            oldValue.PropertyChanged -= OnSelectedDevicePropertyChanged;
+        if (newValue != null)
+            newValue.PropertyChanged += OnSelectedDevicePropertyChanged;
+
+        OnPropertyChanged(nameof(CanControl));
+        _smtcControlService.SwitchDevice(newValue);
+    }
+
+    private void OnSelectedDevicePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AirPlay.App.Models.Device.EnableControl))
+            OnPropertyChanged(nameof(CanControl));
     }
 
     private void OnSessionCreated(object? sender, DeviceSession e)
@@ -115,7 +119,13 @@ public partial class ControlPageVM : ObservableObject
         App.DispatcherQueue.TryEnqueue(() =>
         {
             if (Devices.FirstOrDefault(d => d.Session == e) is Device device)
+            {
+                bool wasSelected = ReferenceEquals(Device, device);
                 Devices.Remove(device);
+
+                if (wasSelected)
+                    Device = Devices.FirstOrDefault();
+            }
 
             OnPropertyChanged(nameof(ShowNoDevice));
         });

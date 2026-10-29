@@ -72,7 +72,6 @@ public partial class Device : ObservableObject
     public Device(DeviceSession deviceSession)
     {
         Session = deviceSession;
-        EnableControl = deviceSession.DacpServiceEndPoint != null;
         PlayingItemName = deviceSession.IsMirrorSession ? "Mirroring" : "Audio";
         Volume = deviceSession.Volume;
 
@@ -86,7 +85,8 @@ public partial class Device : ObservableObject
         deviceSession.MediaCoverReceived += OnMediaCoverReceived;
         deviceSession.RemoteSetVolumeRequest += OnRemoteSetVolumeRequest;
 
-        deviceSession.DacpServiceFound += OnDacpServiceFound;
+        deviceSession.DacpServiceChanged += OnDacpServiceChanged;
+        EnableControl = deviceSession.DacpServiceEndPoint != null;
 
         _setVolumeAction = (arg) => _ = Session.SetVolumeAsync(arg, _httpClient);
         _setVolumeAction = _setVolumeAction.Debounce(500);
@@ -102,7 +102,8 @@ public partial class Device : ObservableObject
 
     private void OnMirrorControllerClosed(object? sender, EventArgs e) => App.DispatcherQueue.TryEnqueue(() => ShowMirrorIcon = false);
 
-    private void OnDacpServiceFound(object? sender, EventArgs e) => App.DispatcherQueue.TryEnqueue(() => EnableControl = true);
+    private void OnDacpServiceChanged(object? sender, EventArgs e) => App.DispatcherQueue.TryEnqueue(
+        () => EnableControl = Session.DacpServiceEndPoint != null);
 
     private void OnAudioControllerCreated(object? sender, EventArgs e)
     {

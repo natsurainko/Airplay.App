@@ -8,17 +8,20 @@ using FFmpeg.AutoGen.Bindings.DynamicallyLoaded;
 using H.NotifyIcon;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Serilog;
+using Serilog.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using Windows.ApplicationModel;
+using Windows.Storage;
 using Windows.Win32;
 using Windows.Win32.UI.WindowsAndMessaging;
 using WinUIEx;
@@ -31,6 +34,8 @@ namespace AirPlay.App;
 public partial class App : Application
 {
     private readonly AppConfiguration _configuration = AppConfiguration.Load();
+    private readonly ILoggerFactory _bootstrapLoggerFactory;
+    private readonly ILogger<App> _logger;
 
     public IHost Host { get; set; }
 
@@ -44,12 +49,61 @@ public partial class App : Application
     /// </summary>
     public App()
     {
-        this.UnhandledException += (_, e) => PInvoke.MessageBox(
-            default, e.Exception?.ToString() ?? e.Message, "AirPlay — 未处理的异常",
-            MESSAGEBOX_STYLE.MB_OK | MESSAGEBOX_STYLE.MB_ICONERROR);
+        const string outputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}][{Level:u3}] <{SourceContext}>: {Message:lj}{NewLine}{Exception}";
+        string logDirectory = Path.Combine(ApplicationData.Current.LocalFolder.Path, "logs");
+        Directory.CreateDirectory(logDirectory);
+        Log.Logger = new LoggerConfiguration()
+            .WriteTo.Console(outputTemplate: outputTemplate)
+            .WriteTo.File(
+                Path.Combine(logDirectory, "log-.txt"),
+                rollOnFileSizeLimit: true,
+                rollingInterval: RollingInterval.Day,
+                fileSizeLimitBytes: 1_000_000,
+                retainedFileCountLimit: 14,
+                shared: true,
+                outputTemplate: outputTemplate)
+            .CreateLogger();
+        // Startup diagnostics run before the host's ILoggerFactory is available.
+        _bootstrapLoggerFactory = new SerilogLoggerFactory(Log.Logger, dispose: false);
+        _logger = _bootstrapLoggerFactory.CreateLogger<App>();
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            _bootstrapLoggerFactory.Dispose();
+            Log.CloseAndFlush();
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            _logger.UnhandledProcessException(e.ExceptionObject as Exception, e.IsTerminating);
+            Log.CloseAndFlush();
+        };
+
+        this.UnhandledException += (_, e) =>
+        {
+            _logger.UnhandledUiException(e.Exception, e.Message);
+            PInvoke.MessageBox(
+                default, e.Exception?.ToString() ?? e.Message, "AirPlay — 未处理的异常",
+                MESSAGEBOX_STYLE.MB_OK | MESSAGEBOX_STYLE.MB_ICONERROR);
+        };
+
+        var version = Package.Current.Id.Version;
+        _logger.ApplicationStarting($"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}",
+            RuntimeInformation.OSDescription, RuntimeInformation.ProcessArchitecture, RuntimeInformation.OSArchitecture,
+            Environment.Version, System.Runtime.Intrinsics.X86.Sse2.IsSupported,
+            System.Runtime.Intrinsics.X86.Avx.IsSupported, System.Runtime.Intrinsics.X86.Avx2.IsSupported,
+            _configuration.MirrorWidth, _configuration.MirrorHeight, _configuration.MirrorMaxFps, logDirectory);
 
         DynamicallyLoadedBindings.LibrariesPath = Path.Combine(Package.Current.InstalledPath, "Libraries");
-        DynamicallyLoadedBindings.Initialize();
+        try
+        {
+            DynamicallyLoadedBindings.Initialize();
+            _logger.FFmpegBindingsInitialized(DynamicallyLoadedBindings.LibrariesPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.FFmpegBindingsInitializationFailed(ex);
+            Log.CloseAndFlush();
+            throw;
+        }
 
         var builder = new HostBuilder()
             .ConfigureServices((hostContext, services) =>
@@ -74,11 +128,7 @@ public partial class App : Application
 
                 services.AddSingleton<ControlWindow>();
 
-                services.AddSerilog(configure =>
-                {
-                    configure.WriteTo.Logger(l => l.WriteTo
-                        .Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}][{Level:u3}] <{SourceContext}>: {Message:lj}{NewLine}{Exception}"));
-                });
+                services.AddSerilog(Log.Logger, dispose: false);
             });
 
         Host = builder.Start();

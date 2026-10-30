@@ -1,5 +1,6 @@
 using AirPlay.App.Extensions;
 using AirPlay.Core2.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI;
 using Microsoft.Graphics.Canvas.UI.Xaml;
@@ -7,7 +8,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Buffers;
-using System.Diagnostics;
 using System.Drawing;
 using System.Threading;
 using System.Timers;
@@ -22,7 +22,9 @@ public sealed partial class MirrorWindow : WindowEx
 {
     private readonly Timer _timer = new(TimeSpan.FromSeconds(1));
     private readonly Lock _bitmapLock = new();
+    private readonly ILogger<MirrorWindow> _logger;
 
+    private int _uploadFailureCount;
     private int _decodedFrames = 0;
     private int _droppedFrames = 0;
 
@@ -32,8 +34,9 @@ public sealed partial class MirrorWindow : WindowEx
     private bool _isRendering = false;
     private bool _isDisposed = false;
 
-    public MirrorWindow(DeviceSession session, Size size)
+    public MirrorWindow(DeviceSession session, Size size, ILogger<MirrorWindow> logger)
     {
+        _logger = logger;
         Session = session;
 
         this.IsMaximizable = false;
@@ -114,7 +117,9 @@ public sealed partial class MirrorWindow : WindowEx
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"OnFrameDataReceived error: {ex.Message}");
+                int count = ++_uploadFailureCount;
+                if (count <= 3 || count % 300 == 0)
+                    _logger.MirrorFrameUploadFailed(ex, Session.DeviceDisplayName, width, height, count);
             }
             finally
             {
@@ -133,10 +138,7 @@ public sealed partial class MirrorWindow : WindowEx
         var dropped = Interlocked.Exchange(ref _droppedFrames, 0);
         var fps = Interlocked.Exchange(ref _decodedFrames, 0);
 
-        if (dropped > 0)
-            Debug.WriteLine($"FPS: {fps} (Dropped: {dropped})");
-        else
-            Debug.WriteLine($"FPS: {fps}");
+        _logger.MirrorFrameStatistics(Session.DeviceDisplayName, fps, dropped);
     }
 
     private void OnWindowClosed(object sender, WindowEventArgs args)

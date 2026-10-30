@@ -72,6 +72,16 @@ internal class MirrorService(SessionManager sessionManager, ILoggerFactory logge
                             throw;
                         }
 
+                        // Decoder callbacks run synchronously under the session lock below.
+                        void OnDecodedFrame(byte[] rgbData, int width, int height)
+                        {
+                            if (mirrorWindow != null)
+                                mirrorWindow.OnFrameDataReceived(rgbData, width, height);
+                            else
+                                ArrayPool<byte>.Shared.Return(rgbData);
+                        }
+
+                        Action<byte[], int, int> onDecodedFrame = OnDecodedFrame;
                         bool loggedFirstPayload = false;
                         void OnFrameReceived(byte[] data)
                         {
@@ -87,13 +97,7 @@ internal class MirrorService(SessionManager sessionManager, ILoggerFactory logge
 
                                 try
                                 {
-                                    if (decoder.Decode(data, out var rgbData, out var width, out var height))
-                                    {
-                                        if (mirrorWindow != null)
-                                            mirrorWindow.OnFrameDataReceived(rgbData, width, height);
-                                        else
-                                            ArrayPool<byte>.Shared.Return(rgbData);
-                                    }
+                                    decoder.Decode(data, onDecodedFrame);
                                 }
                                 catch (Exception ex)
                                 {

@@ -9,13 +9,18 @@ using Microsoft.Extensions.Logging;
 
 namespace AirPlay.App.FFmpeg;
 
-/// <summary>Shared software decoding and aligned BGRA conversion for H.264 and HEVC.</summary>
+/// <summary>Shared software decoding and tightly packed BGRA conversion for H.264 and HEVC.</summary>
 public abstract unsafe class FFmpegVideoDecoder : IVideoDecoder
 {
+    // Extra space after the last row for SIMD accesses; this does not add per-row padding.
+    private const int RgbTailPadding = 64;
+
     private readonly Lock _lock = new();
     private readonly ILogger _logger;
     private int _failureCount;
     private bool _loggedFirstFrame;
+    private bool _draining;
+    private bool _endOfStream;
 
     private readonly AVCodecContext* _codecContext;
     private readonly AVFrame* _frame;
@@ -55,96 +60,172 @@ public abstract unsafe class FFmpegVideoDecoder : IVideoDecoder
         }
     }
 
-    public bool Decode(byte[] encodedData, [NotNullWhen(true)] out byte[]? rgbData, out int width, out int height)
+    public void Decode(byte[] encodedData, Action<byte[], int, int> onFrame)
     {
-        rgbData = null;
-        width = height = 0;
-
+        ArgumentNullException.ThrowIfNull(encodedData);
+        ArgumentNullException.ThrowIfNull(onFrame);
         lock (_lock)
         {
-            if (Disposed || encodedData.Length == 0) return false;
+            if (Disposed) return;
+            if (_draining || _endOfStream)
+                throw new InvalidOperationException("Cannot submit video after end of input; create a new decoder.");
+            // Empty input is not an end-of-stream signal. Use Flush explicitly.
+            if (encodedData.Length == 0) return;
 
-            // FFmpeg bitstream readers require AV_INPUT_BUFFER_PADDING_SIZE zero bytes.
-            // An owned packet also remains valid if the decoder retains a reference to it.
+            // Owned storage supplies FFmpeg's required zero padding and reference counting.
             ffmpeg.av_packet_unref(_packet);
             int allocationResult = ffmpeg.av_new_packet(_packet, encodedData.Length);
-            if (allocationResult < 0) return ReportFailure("av_new_packet", allocationResult);
+            if (allocationResult < 0)
+            {
+                ReportFailure("av_new_packet", allocationResult);
+                return;
+            }
 
             try
             {
                 encodedData.AsSpan().CopyTo(new Span<byte>(_packet->data, encodedData.Length));
-                int ret = ffmpeg.avcodec_send_packet(_codecContext, _packet);
-                if (ret < 0) return ReportFailure("avcodec_send_packet", ret);
-
-                ret = ffmpeg.avcodec_receive_frame(_codecContext, _frame);
-                if (ret < 0)
-                {
-                    // AVERROR(EAGAIN): needing more input is not a decoding failure.
-                    if (ret == -ffmpeg.EAGAIN) return false;
-                    return ReportFailure("avcodec_receive_frame", ret);
-                }
-
-                width = _frame->width;
-                height = _frame->height;
-                if (width <= 0 || height <= 0) return ReportFailure("Invalid frame dimensions");
-
-                if (!_loggedFirstFrame)
-                {
-                    _loggedFirstFrame = true;
-                    _logger.FirstVideoFrameDecoded(Codec, width, height, (AVPixelFormat)_frame->format,
-                        _frame->linesize[0], _frame->linesize[1], _frame->linesize[2]);
-                }
-
-                int rgbStride = checked(width * 4);
-                int rgbLength = checked(rgbStride * height);
-                AVFrame* rgbFrame = ffmpeg.av_frame_alloc();
-                if (rgbFrame == null) return ReportFailure("av_frame_alloc");
-                SwsContext* swsCtx = null;
-                byte[]? outputBuffer = null;
-
-                try
-                {
-                    rgbFrame->format = (int)AVPixelFormat.AV_PIX_FMT_BGRA;
-                    rgbFrame->width = width;
-                    rgbFrame->height = height;
-                    int rgbAllocationResult = ffmpeg.av_frame_get_buffer(rgbFrame, 32);
-                    if (rgbAllocationResult < 0)
-                        return ReportFailure("av_frame_get_buffer", rgbAllocationResult);
-
-                    swsCtx = ffmpeg.sws_getContext(
-                        width, height, (AVPixelFormat)_frame->format,
-                        width, height, AVPixelFormat.AV_PIX_FMT_BGRA,
-                        (int)SwsFlags.SWS_BILINEAR, null, null, null);
-                    if (swsCtx == null) return ReportFailure("sws_getContext");
-
-                    int convertedRows = ffmpeg.sws_scale(
-                        swsCtx, _frame->data, _frame->linesize, 0, height,
-                        rgbFrame->data, rgbFrame->linesize);
-                    if (convertedRows != height || rgbFrame->linesize[0] < rgbStride)
-                        return ReportFailure("sws_scale", convertedRows);
-
-                    // Upload tightly packed BGRA, without FFmpeg's aligned row padding.
-                    outputBuffer = ArrayPool<byte>.Shared.Rent(rgbLength);
-                    for (int y = 0; y < height; y++)
-                    {
-                        new ReadOnlySpan<byte>(rgbFrame->data[0] + y * rgbFrame->linesize[0], rgbStride)
-                            .CopyTo(outputBuffer.AsSpan(y * rgbStride, rgbStride));
-                    }
-                    rgbData = outputBuffer;
-                }
-                finally
-                {
-                    if (outputBuffer != null && rgbData == null)
-                        ArrayPool<byte>.Shared.Return(outputBuffer);
-                    if (swsCtx != null) ffmpeg.sws_freeContext(swsCtx);
-                    ffmpeg.av_frame_free(&rgbFrame);
-                }
-                return true;
+                if (SendPacket(_packet, onFrame))
+                    ReceiveFrames(onFrame, out _);
             }
             finally
             {
                 ffmpeg.av_packet_unref(_packet);
             }
+        }
+    }
+
+    public void Flush(Action<byte[], int, int> onFrame)
+    {
+        ArgumentNullException.ThrowIfNull(onFrame);
+        lock (_lock)
+        {
+            if (Disposed || _endOfStream) return;
+            if (!_draining)
+            {
+                if (!SendPacket(null, onFrame)) return;
+                _draining = true;
+            }
+
+            int result = ReceiveFrames(onFrame, out _);
+            // Once the null packet is accepted, receive must reach EOF, not need more input.
+            if (result == -ffmpeg.EAGAIN)
+                ReportFailure("avcodec_receive_frame: EAGAIN after end of input", result);
+        }
+    }
+
+    private bool SendPacket(AVPacket* packet, Action<byte[], int, int> onFrame)
+    {
+        while (true)
+        {
+            int result = ffmpeg.avcodec_send_packet(_codecContext, packet);
+            if (result == 0) return true;
+            if (result == ffmpeg.AVERROR_EOF)
+            {
+                _endOfStream = true;
+                if (packet != null) ReportFailure("avcodec_send_packet", result);
+                return false;
+            }
+            if (result != -ffmpeg.EAGAIN)
+            {
+                ReportFailure("avcodec_send_packet", result);
+                return false;
+            }
+
+            // The input was NOT consumed. Receive pending output, then retry this exact packet.
+            int receiveResult = ReceiveFrames(onFrame, out int received);
+            if (receiveResult != -ffmpeg.EAGAIN) return false;
+            if (received == 0)
+            {
+                // FFmpeg forbids both sides returning EAGAIN without progress. Do not busy-loop.
+                ReportFailure("avcodec_send_packet/receive_frame: no progress", result);
+                return false;
+            }
+        }
+    }
+
+    private int ReceiveFrames(Action<byte[], int, int> onFrame, out int received)
+    {
+        received = 0;
+        while (true)
+        {
+            int result = ffmpeg.avcodec_receive_frame(_codecContext, _frame);
+            if (result < 0)
+            {
+                if (result == ffmpeg.AVERROR_EOF)
+                    _endOfStream = true;
+                else if (result != -ffmpeg.EAGAIN)
+                    ReportFailure("avcodec_receive_frame", result);
+                return result;
+            }
+
+            received++;
+            try
+            {
+                // A conversion failure must not leave later decoded frames waiting in the codec.
+                if (TryConvertFrame(out var rgbData, out int width, out int height))
+                    onFrame(rgbData, width, height);
+            }
+            finally
+            {
+                // Also release the native frame if conversion or the consumer throws.
+                ffmpeg.av_frame_unref(_frame);
+            }
+        }
+    }
+
+    private bool TryConvertFrame([NotNullWhen(true)] out byte[]? rgbData, out int width, out int height)
+    {
+        rgbData = null;
+        width = _frame->width;
+        height = _frame->height;
+        if (width <= 0 || height <= 0) return ReportFailure("Invalid frame dimensions");
+
+        if (!_loggedFirstFrame)
+        {
+            _loggedFirstFrame = true;
+            _logger.FirstVideoFrameDecoded(Codec, width, height, (AVPixelFormat)_frame->format,
+                _frame->linesize[0], _frame->linesize[1], _frame->linesize[2]);
+        }
+
+        int rgbStride = checked(width * 4);
+        int rgbLength = checked(rgbStride * height);
+        SwsContext* swsCtx = null;
+        byte[]? outputBuffer = null;
+
+        try
+        {
+            swsCtx = ffmpeg.sws_getContext(
+                width, height, (AVPixelFormat)_frame->format,
+                width, height, AVPixelFormat.AV_PIX_FMT_BGRA,
+                (int)SwsFlags.SWS_BILINEAR, null, null, null);
+            if (swsCtx == null) return ReportFailure("sws_getContext");
+
+            outputBuffer = ArrayPool<byte>.Shared.Rent(checked(rgbLength + RgbTailPadding));
+            outputBuffer.AsSpan(rgbLength, RgbTailPadding).Clear();
+
+            int convertedRows;
+            // sws_scale is synchronous and does not retain the destination pointer.
+            // Write directly into the upload buffer, with no intermediate RGB frame.
+            fixed (byte* destination = outputBuffer)
+            {
+                byte*[] destinationData = [destination, null, null, null];
+                int[] destinationStrides = [rgbStride, 0, 0, 0];
+                convertedRows = ffmpeg.sws_scale(
+                    swsCtx, _frame->data, _frame->linesize, 0, height,
+                    destinationData, destinationStrides);
+            }
+            if (convertedRows != height)
+                return ReportFailure("sws_scale", convertedRows);
+
+            // Only the first rgbLength bytes contain tightly packed pixel data.
+            rgbData = outputBuffer;
+            return true;
+        }
+        finally
+        {
+            if (outputBuffer != null && rgbData == null)
+                ArrayPool<byte>.Shared.Return(outputBuffer);
+            if (swsCtx != null) ffmpeg.sws_freeContext(swsCtx);
         }
     }
 

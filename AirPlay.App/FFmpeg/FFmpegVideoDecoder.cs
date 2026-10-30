@@ -12,18 +12,19 @@ namespace AirPlay.App.FFmpeg;
 /// <summary>Shared software decoding and tightly packed BGRA conversion for H.264 and HEVC.</summary>
 public abstract unsafe class FFmpegVideoDecoder : IVideoDecoder
 {
-    // Extra space after the last row for SIMD accesses; this does not add per-row padding.
-    private const int RgbTailPadding = 64;
-
     private readonly Lock _lock = new();
     private readonly ILogger _logger;
     private int _failureCount;
     private bool _loggedFirstFrame;
     private bool _draining;
     private bool _endOfStream;
+    private (AVPixelFormat Format, AVColorRange Range, AVColorSpace Matrix,
+        AVColorPrimaries Primaries, AVColorTransferCharacteristic Transfer,
+        AVChromaLocation Chroma)? _lastColorMetadata;
 
     private readonly AVCodecContext* _codecContext;
     private readonly AVFrame* _frame;
+    private readonly AVFrame* _rgbFrame;
     private readonly AVPacket* _packet;
 
     public MirrorVideoCodec Codec { get; }
@@ -47,9 +48,10 @@ public abstract unsafe class FFmpegVideoDecoder : IVideoDecoder
                 throw new ApplicationException($"Could not open {codecType} codec.");
 
             _frame = ffmpeg.av_frame_alloc();
+            _rgbFrame = ffmpeg.av_frame_alloc();
             _packet = ffmpeg.av_packet_alloc();
-            if (_frame == null || _packet == null)
-                throw new ApplicationException("Could not allocate decoder frame or packet.");
+            if (_frame == null || _rgbFrame == null || _packet == null)
+                throw new ApplicationException("Could not allocate decoder frames or packet.");
 
             _logger.VideoDecoderInitialized(Codec, ffmpeg.avcodec_version());
         }
@@ -189,35 +191,37 @@ public abstract unsafe class FFmpegVideoDecoder : IVideoDecoder
 
         int rgbStride = checked(width * 4);
         int rgbLength = checked(rgbStride * height);
+        if (!EnsureRgbFrame(width, height)) return false;
+        AVFrame* rgbFrame = _rgbFrame;
         SwsContext* swsCtx = null;
         byte[]? outputBuffer = null;
 
         try
         {
+            var sourceFormat = (AVPixelFormat)_frame->format;
+            // YUVJ has the same plane layout as YUV, but implies full range. Normalize
+            // the format so range is controlled explicitly below, not implicitly by swscale.
             swsCtx = ffmpeg.sws_getContext(
-                width, height, (AVPixelFormat)_frame->format,
+                width, height, NormalizeYuvFormat(sourceFormat),
                 width, height, AVPixelFormat.AV_PIX_FMT_BGRA,
                 (int)SwsFlags.SWS_BILINEAR, null, null, null);
             if (swsCtx == null) return ReportFailure("sws_getContext");
+            if (!ConfigureColorspace(swsCtx, sourceFormat)) return false;
 
-            outputBuffer = ArrayPool<byte>.Shared.Rent(checked(rgbLength + RgbTailPadding));
-            outputBuffer.AsSpan(rgbLength, RgbTailPadding).Clear();
-
-            int convertedRows;
-            // sws_scale is synchronous and does not retain the destination pointer.
-            // Write directly into the upload buffer, with no intermediate RGB frame.
-            fixed (byte* destination = outputBuffer)
-            {
-                byte*[] destinationData = [destination, null, null, null];
-                int[] destinationStrides = [rgbStride, 0, 0, 0];
-                convertedRows = ffmpeg.sws_scale(
-                    swsCtx, _frame->data, _frame->linesize, 0, height,
-                    destinationData, destinationStrides);
-            }
-            if (convertedRows != height)
+            int convertedRows = ffmpeg.sws_scale(
+                swsCtx, _frame->data, _frame->linesize, 0, height,
+                rgbFrame->data, rgbFrame->linesize);
+            if (convertedRows != height || rgbFrame->linesize[0] < rgbStride)
                 return ReportFailure("sws_scale", convertedRows);
 
-            // Only the first rgbLength bytes contain tightly packed pixel data.
+            // Win2D expects tightly packed pixels. Copy only the visible bytes of each
+            // aligned output row, excluding FFmpeg's per-row padding.
+            outputBuffer = ArrayPool<byte>.Shared.Rent(rgbLength);
+            for (int y = 0; y < height; y++)
+            {
+                new ReadOnlySpan<byte>(rgbFrame->data[0] + y * rgbFrame->linesize[0], rgbStride)
+                    .CopyTo(outputBuffer.AsSpan(y * rgbStride, rgbStride));
+            }
             rgbData = outputBuffer;
             return true;
         }
@@ -227,6 +231,104 @@ public abstract unsafe class FFmpegVideoDecoder : IVideoDecoder
                 ArrayPool<byte>.Shared.Return(outputBuffer);
             if (swsCtx != null) ffmpeg.sws_freeContext(swsCtx);
         }
+    }
+
+    // Called under _lock. Only the independent managed copy escapes to the renderer,
+    // so the aligned native destination can be overwritten for the next decoded frame.
+    private bool EnsureRgbFrame(int width, int height)
+    {
+        if (_rgbFrame->buf[0] == null ||
+            _rgbFrame->format != (int)AVPixelFormat.AV_PIX_FMT_BGRA ||
+            _rgbFrame->width != width || _rgbFrame->height != height)
+        {
+            ffmpeg.av_frame_unref(_rgbFrame);
+            _rgbFrame->format = (int)AVPixelFormat.AV_PIX_FMT_BGRA;
+            _rgbFrame->width = width;
+            _rgbFrame->height = height;
+            int result = ffmpeg.av_frame_get_buffer(_rgbFrame, 32);
+            if (result < 0)
+            {
+                // Leave an empty frame so the next call can retry even at the same size.
+                ffmpeg.av_frame_unref(_rgbFrame);
+                return ReportFailure("av_frame_get_buffer", result);
+            }
+            return true;
+        }
+
+        // Normally already exclusive: no new allocation occurs in that case.
+        int writableResult = ffmpeg.av_frame_make_writable(_rgbFrame);
+        return writableResult >= 0 || ReportFailure("av_frame_make_writable", writableResult);
+    }
+
+    private static AVPixelFormat NormalizeYuvFormat(AVPixelFormat format) => format switch
+    {
+        AVPixelFormat.AV_PIX_FMT_YUVJ420P => AVPixelFormat.AV_PIX_FMT_YUV420P,
+        AVPixelFormat.AV_PIX_FMT_YUVJ422P => AVPixelFormat.AV_PIX_FMT_YUV422P,
+        AVPixelFormat.AV_PIX_FMT_YUVJ444P => AVPixelFormat.AV_PIX_FMT_YUV444P,
+        AVPixelFormat.AV_PIX_FMT_YUVJ440P => AVPixelFormat.AV_PIX_FMT_YUV440P,
+        AVPixelFormat.AV_PIX_FMT_YUVJ411P => AVPixelFormat.AV_PIX_FMT_YUV411P,
+        _ => format
+    };
+
+    private bool ConfigureColorspace(SwsContext* swsCtx, AVPixelFormat sourceFormat)
+    {
+        bool rangeInferred = _frame->color_range is not
+            (AVColorRange.AVCOL_RANGE_JPEG or AVColorRange.AVCOL_RANGE_MPEG);
+        bool fullRange = _frame->color_range switch
+        {
+            AVColorRange.AVCOL_RANGE_JPEG => true,
+            AVColorRange.AVCOL_RANGE_MPEG => false,
+            // With no explicit range, legacy YUVJ implies full range; other YUV defaults to limited.
+            _ => NormalizeYuvFormat(sourceFormat) != sourceFormat
+        };
+
+        var (coefficientId, matrixName, matrixFallback) = _frame->colorspace switch
+        {
+            AVColorSpace.AVCOL_SPC_BT709 => (ffmpeg.SWS_CS_ITU709, "BT.709", false),
+            AVColorSpace.AVCOL_SPC_BT470BG or AVColorSpace.AVCOL_SPC_SMPTE170M
+                => (ffmpeg.SWS_CS_ITU601, "BT.601", false),
+            AVColorSpace.AVCOL_SPC_FCC => (ffmpeg.SWS_CS_FCC, "FCC", false),
+            AVColorSpace.AVCOL_SPC_SMPTE240M => (ffmpeg.SWS_CS_SMPTE240M, "SMPTE240M", false),
+            AVColorSpace.AVCOL_SPC_BT2020_NCL => (ffmpeg.SWS_CS_BT2020, "BT.2020 NCL", false),
+            // Application-specific fallback for untagged AirPlay screen mirroring, not a
+            // general rule for untagged video. Keep it independent of portrait/landscape size.
+            // Unsupported matrices are also approximated and produce a warning below.
+            _ => (ffmpeg.SWS_CS_ITU709, "BT.709", true)
+        };
+
+        int* coefficientTable = ffmpeg.sws_getCoefficients(coefficientId);
+        if (coefficientTable == null) return ReportFailure("sws_getCoefficients");
+        int4 coefficients = default;
+        for (uint i = 0; i < 4; i++) coefficients[i] = coefficientTable[i];
+
+        // RGB output uses full-range code values. The second table does not perform a
+        // primaries/gamut conversion; it is the matrix for YUV output (unused for BGRA).
+        // Neutral 16.16 corrections: brightness=0, contrast=1, saturation=1.
+        int result = ffmpeg.sws_setColorspaceDetails(
+            swsCtx, in coefficients, fullRange ? 1 : 0, in coefficients, 1,
+            0, 1 << 16, 1 << 16);
+        if (result < 0) return ReportFailure("sws_setColorspaceDetails", result);
+
+        var metadata = (sourceFormat, _frame->color_range, _frame->colorspace,
+            _frame->color_primaries, _frame->color_trc, _frame->chroma_location);
+        if (!_lastColorMetadata.HasValue || !_lastColorMetadata.Value.Equals(metadata))
+        {
+            _logger.VideoColorConversionConfigured(Codec, sourceFormat, _frame->color_range,
+                _frame->colorspace, _frame->color_primaries, _frame->color_trc,
+                _frame->chroma_location, matrixName, fullRange, matrixFallback, rangeInferred);
+
+            bool hdr = _frame->color_trc is AVColorTransferCharacteristic.AVCOL_TRC_SMPTE2084
+                or AVColorTransferCharacteristic.AVCOL_TRC_ARIB_STD_B67;
+            bool otherPrimaries = _frame->color_primaries is not
+                (AVColorPrimaries.AVCOL_PRI_UNSPECIFIED or AVColorPrimaries.AVCOL_PRI_BT709);
+            bool unsupportedMatrix = matrixFallback && _frame->colorspace != AVColorSpace.AVCOL_SPC_UNSPECIFIED;
+            if (hdr || otherPrimaries || unsupportedMatrix)
+                _logger.VideoColorManagementLimited(Codec, _frame->colorspace,
+                    _frame->color_primaries, _frame->color_trc);
+
+            _lastColorMetadata = metadata;
+        }
+        return true;
     }
 
     private bool ReportFailure(string operation, int? result = null)
@@ -243,6 +345,10 @@ public abstract unsafe class FFmpegVideoDecoder : IVideoDecoder
         {
             if (Disposed) return;
             Disposed = true;
+            if (_rgbFrame != null)
+            {
+                fixed (AVFrame** rgbFrame = &_rgbFrame) ffmpeg.av_frame_free(rgbFrame);
+            }
             if (_frame != null)
             {
                 fixed (AVFrame** frame = &_frame) ffmpeg.av_frame_free(frame);

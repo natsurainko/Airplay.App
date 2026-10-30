@@ -62,6 +62,21 @@ internal static partial class VideoDecoderLoggers
     public static partial void FirstVideoFrameDecoded(this ILogger logger, MirrorVideoCodec codec, int width, int height,
         AVPixelFormat format, int yStride, int uStride, int vStride);
 
+    [LoggerMessage(LogLevel.Information,
+        "{Codec} color conversion: format={Format}, range={Range}, matrix={Matrix}, primaries={Primaries}, " +
+        "transfer={Transfer}, chroma={Chroma}; appliedMatrix={AppliedMatrix}, inputFullRange={InputFullRange}, " +
+        "matrixFallback={MatrixFallback}, rangeInferred={RangeInferred}; output=full-range BGRA8")]
+    public static partial void VideoColorConversionConfigured(this ILogger logger, MirrorVideoCodec codec,
+        AVPixelFormat format, AVColorRange range, AVColorSpace matrix, AVColorPrimaries primaries,
+        AVColorTransferCharacteristic transfer, AVChromaLocation chroma, string appliedMatrix,
+        bool inputFullRange, bool matrixFallback, bool rangeInferred);
+
+    [LoggerMessage(LogLevel.Warning,
+        "{Codec} color management is incomplete: matrix={Matrix}, primaries={Primaries}, transfer={Transfer}; " +
+        "only supported YUV matrices and ranges are handled; no gamut mapping or HDR tone mapping")]
+    public static partial void VideoColorManagementLimited(this ILogger logger, MirrorVideoCodec codec,
+        AVColorSpace matrix, AVColorPrimaries primaries, AVColorTransferCharacteristic transfer);
+
     [LoggerMessage(LogLevel.Warning, "{Codec} pipeline failure: operation={Operation}, result={Result}, failureCount={FailureCount}")]
     public static partial void VideoDecodeFailed(this ILogger logger, MirrorVideoCodec codec, string operation, int? result, int failureCount);
 }
